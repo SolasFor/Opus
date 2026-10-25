@@ -7,7 +7,7 @@
 | Демо | Что внутри | Онлайн | Файл |
 |------|-----------|--------|------|
 | 🐠 **Аквариум** | Рифовая сцена: стаи рыб, свет, вода, каустика | [открыть](https://solasfor.github.io/Opus/Akvarium/Aquarium.html) | [`Akvarium/Aquarium.html`](Akvarium/Aquarium.html) |
-| ⚙️ **Двигатель** | Рядная «четвёрка» DOHC 16V: разборка, разрез, рабочий цикл | [открыть](https://solasfor.github.io/Opus/Engin/Engin.html) | [`Engin/Engin.html`](Engin/Engin.html) |
+| ⚙️ **Двигатель** | Рядная «четвёрка» DOHC 16V: разборка, разрез, рабочий цикл | [открыть](https://solasfor.github.io/Opus/Engine/Engine.html) | [`Engine/Engine.html`](Engin/Engin.html) |
 | 🪐 **Солнечная система** | Восемь планет на орбитах, карточки с данными и фактами | [открыть](https://solasfor.github.io/Opus/SolarSystem/SolarSystem.html) | [`SolarSystem/SolarSystem.html`](SolarSystem/SolarSystem.html) |
 
 > Интерфейс обеих сцен — на русском языке.
@@ -23,7 +23,7 @@ python -m http.server 8000
 После этого:
 
 - Аквариум — <http://localhost:8000/Akvarium/Aquarium.html>
-- Двигатель — <http://localhost:8000/Engin/Engin.html>
+- Двигатель — <http://localhost:8000/Engine/Engine.html>
 - Солнечная система — <http://localhost:8000/SolarSystem/SolarSystem.html>
 
 **Требования:** современный браузер с WebGL и ES-модулями, доступ в интернет. Three.js подгружается с CDN: в Аквариуме и Двигателе — версия 0.160 с аддонами через `importmap` (unpkg), в Солнечной системе — r128 (cdnjs и unpkg).
@@ -144,8 +144,8 @@ Opus/
 ├── .gitignore
 ├── Akvarium/
 │   └── Aquarium.html   # аквариум, ~109 КБ
-├── Engin/
-│   └── Engin.html      # двигатель, ~134 КБ
+├── Engine/
+│   └── Engine.html      # двигатель, ~134 КБ
 ├── SolarSystem/
 │   └── SolarSystem.html  # солнечная система, ~23 КБ
 └── README.md
