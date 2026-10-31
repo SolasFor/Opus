@@ -37,7 +37,8 @@
                     (орбиты и подписи лун проявляются при приближении; на узких экранах пороги
                     приближения масштабируются вместе с отводом камеры — орбиты видны и на телефоне)
     M             — музыка вкл / выкл (плавное нарастание и затухание; работает и в русской раскладке — «Ь»)
-    R / Shift+R   — следующий / предыдущий режим масштаба (работает и в русской раскладке — «К»)
+    R             — масштаб: «Схема» ↔ «Истинный 1:1» (Shift+R — то же; работает и в русской раскладке — «К»)
+    B / Shift+B   — свечение (bloom): Авто → Вкл → Выкл / назад (работает и в русской раскладке — «И»)
 
   Музыка (этап 3)
     · Эмбиент генерируется прямо в браузере через Web Audio API: пэды из расстроенных генераторов
@@ -52,11 +53,11 @@
     · localStorage: ключ «solar.audio» = { "on": true|false, "volume": 0…1 }.
 
   Реалистичные масштабы (этап 4)
-    · Три режима: «Схема» (как раньше, по умолчанию) → «Реальные расстояния» (1 а.е. = 10 ед. сцены,
-      все планеты увеличены одинаково ×500, Солнце ×20 — иначе оно поглотило бы Меркурий) →
-      «Реальные размеры и расстояния» (всё 1 : 1; Земля — 0,0004 ед., Нептун — в 302 ед. от Солнца).
-    · Переключение: клавиша R (Shift+R — назад), кнопка «◎ Масштаб» на нижней панели (на узких экранах — первая),
-      переключатель из трёх положений в «Настройках». Режим не сохраняется между визитами.
+    · Два режима (с этапа 6): «Схема» (как раньше, по умолчанию) и «Истинный 1:1» — реальные размеры
+      и расстояния (1 а.е. = 10 ед. сцены; Земля — 0,0004 ед., Нептун — в 302 ед. от Солнца).
+      Промежуточный режим «Реальные расстояния» (планеты ×500, Солнце ×20) убран на этапе 6 по решению владельца.
+    · Переключение: клавиша R (туда-обратно), кнопка «◎ Масштаб» на нижней панели (на узких экранах — первая),
+      переключатель из двух положений в «Настройках». Режим не сохраняется между визитами.
     · Переход длится 1,5 с: расстояния меняются линейно, размеры — в логарифмическом пространстве;
       кадр сохраняется (камера, следящая за объектом, остаётся на том же «числе радиусов» от него,
       в общем виде — на той же доле охвата системы). При prefers-reduced-motion — мгновенно.
@@ -64,7 +65,7 @@
       (Луна — в 60 радиусах Земли, Каллисто — в 27 радиусах Юпитера).
     · Пояс астероидов в реальных режимах: 2,06–3,35 а.е. с люками Кирквуда (2,50 / 2,82 / 2,96 / 3,28 а.е.);
       пояс Койпера: плутино на 39,4 а.е., классический пояс 42–48 а.е., рассеянная часть 30–50 а.е.
-      Камни пояса показаны ×500 в режиме расстояний и скрыты в 1 : 1 (они меньше пикселя).
+      Камни пояса в 1 : 1 скрыты (они меньше пикселя).
     · Объекты меньше ~3 px отмечаются цветной точкой; подписи остаются над центром объекта.
       Клик/тап попадает по объекту с допуском 14 px (24 px на сенсорных экранах).
     · Лупа: при наведении (на телефоне — для выбранного объекта), если его диск меньше 8 px,
@@ -74,14 +75,47 @@
     · Индикатор масштаба слева внизу: «1 px ≈ N км» на расстоянии точки, вокруг которой вращается камера,
       и линейка (км / млн км / а.е.). В карточке объекта — реальный радиус, расстояние от Солнца
       (а.е. и км, время прохождения света) или от планеты (км и радиусы планеты) и текущие коэффициенты
-      искажения («размер ×500 · расстояние ×1»).
+      искажения (в 1 : 1 — «размер ×1 · расстояние ×1»).
     · Точность: ближняя плоскость отсечения следует за расстоянием до ближайшей поверхности (до 1e-7 ед.),
       позиции вершин считаются через modelViewMatrix — без дрожания и z-fighting даже у Мимаса в 1 : 1.
 
+  Свечение и тон (этап 5)
+    · Bloom светит только Солнце, корону, «звезду-Солнце» масштаба 1 : 1 и гейзеры Энцелада;
+      планеты, кольца, огни городов, лава Ио, звёзды и подписи остаются чёткими (выборочный bloom:
+      отдельный лёгкий проход рисует только светящиеся объекты, диски планет и лун — чёрными заслонками).
+    · Цепочка HDR: сцена (линейный HDR) → bloom → ACES → виньетка → sRGB. Тот же ACES и та же яркость —
+      в лупе и в запасном режиме без пост-обработки (ACESFilmic three.js). Яркость — константа FX_EXPOSURE.
+    · Включение и выключение — плавные (0,3 с); в положении «Выкл» проход bloom не выполняется вовсе.
+      На мобильных bloom считается в половинном разрешении.
+    · Режимы: «Авто» (по умолчанию) / «Вкл» / «Выкл» — переключатель в «Настройках» (⚙) и клавиша B.
+      Авто выключает bloom: на программном рендеринге (SwiftShader, llvmpipe, Microsoft Basic Render и т. п.),
+      на слабых GPU, без пост-обработки, а также если кадр дольше 28 мс держится 3 с (появляется уведомление).
+      После такого выключения Авто не включает bloom до конца визита — без мерцания; «Вкл» включает вручную.
+    · Если скрипты пост-обработки не загрузились, переключатель показывает «Недоступно».
+    · localStorage: ключ «solar.fx» = { "bloom": "auto" | "on" | "off", "shadows": "on" | "off" }.
+
+  Тени и затмения (этап 6)
+    · Тени спутников на планетах (Ио, Европа, Ганимед, Каллисто — на Юпитере; луны Сатурна — на Сатурне;
+      Луна — на Земле) и затмения: планета закрывает Солнце своим лунам (Земля — Луне, Юпитер — галилеевым
+      спутникам, Сатурн — своим; луны — и друг другу). Дымка Титана темнеет в тени Сатурна.
+    · Тени аналитические, в шейдерах: для каждой точки поверхности считается, какая доля диска Солнца закрыта
+      сферой-затенителем (до 6 на объект), — получаются честные тень и полутень в обоих масштабах.
+      Shadow map и DirectionalLight не используются: Солнце — точечный источник в центре, а сцена занимает
+      от 1e-7 до 3000 ед. (карте теней не хватило бы разрешения даже на тень Ио). Дополнительных проходов рендера нет.
+    · В схеме угловой размер Солнца для теней ограничен реальным (иначе огромное близкое Солнце размыло бы тени).
+    · Тень Сатурна на кольцах и колец на Сатурне — с полутенью по угловому размеру Солнца (всегда включены, как с этапа 1).
+    · Огни городов Земли, лава Ио и рассеянный свет в тени не гаснут.
+    · Включение: «Тени и затмения: Вкл / Выкл» в «Настройках» (⚙), ?shadows=on | off. Горячей клавиши нет.
+      По умолчанию включены везде, включая мобильные. Сохраняется в «solar.fx» (поле "shadows").
+
   Параметры адреса
-    ?scale=au | distance — старт в режиме реальных расстояний; ?scale=true | real | full | 2 — в истинном масштабе
+    ?scale=1 | true | real | full | 2 — старт в масштабе «Истинный 1:1»; ?scale=0 | scheme — в схеме.
+      Старые ссылки ?scale=au | distance (режим «Реальные расстояния» удалён) тоже открывают 1:1.
     ?tex=512 | 1024 | 2048 | 4096 — разрешение процедурных текстур
     (по умолчанию 2048, на мобильных — 1024; спутники используют половину этого значения).
+    ?bloom=auto | on | off — режим свечения на этот визит (перекрывает сохранённый, но не перезаписывает его).
+    ?shadows=on | off — тени и затмения на этот визит (перекрывает сохранённое значение, но не перезаписывает его).
+    Для слабых машин: ?tex=1024&bloom=off (при необходимости и &shadows=off).
 -->
 <html lang="ru">
 <head>
@@ -231,10 +265,17 @@
     .loupe-name { bottom: -19px; color: #eaf8ff; }
     .loupe-mag { top: -18px; color: var(--cyan); letter-spacing: .04em; }
     .seg { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; border: 1px solid rgba(140,232,255,.18); border-radius: 9px; }
+    .seg.two { grid-template-columns: repeat(2, 1fr); }
     .seg button { padding: 6px 2px; border: 0; border-radius: 6px; background: transparent; color: rgba(220,237,255,.7); font: 600 10.5px Inter, system-ui, sans-serif; cursor: pointer; transition: background .2s, color .2s; }
     .seg button:hover { color: #fff; }
     .seg button.on { background: rgba(140,232,255,.18); color: #fff; }
     .settings-row + .settings-row { margin-top: 13px; }
+    /* ---------- Этап 5: свечение ---------- */
+    .settings-sub { grid-column: 1 / -1; margin-top: -2px; color: var(--muted); font-size: 10.5px; }
+    .seg button:disabled { opacity: .38; cursor: not-allowed; }
+    .seg button:disabled:hover { color: rgba(220,237,255,.7); }
+    .toast { position: fixed; z-index: 9; left: 50%; top: 86px; max-width: min(460px, calc(100vw - 32px)); padding: 9px 15px; border: 1px solid var(--line); border-radius: 11px; background: rgba(7, 15, 31, .9); box-shadow: 0 12px 34px rgba(0,0,0,.4); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); color: var(--text); font-size: 12px; line-height: 1.45; text-align: center; pointer-events: none; opacity: 0; visibility: hidden; transform: translate(-50%, -6px); transition: opacity .25s ease, transform .25s ease, visibility .25s; }
+    .toast.on { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
     .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     body.panel-open .legend { opacity: 0; }
     @media (max-width: 900px) {
@@ -328,7 +369,7 @@
       <button class="control-button toggle active" id="labelsToggle">Подписи</button>
       <button class="control-button" id="tourButton">✦ Экскурсия</button>
       <button class="control-button" id="resetButton">↺ Обзор</button>
-      <button class="control-button" id="scaleButton" title="Масштаб (R — следующий, Shift+R — предыдущий)"><span aria-hidden="true">◎</span><span id="scaleLabel">Схема</span></button>
+      <button class="control-button" id="scaleButton" title="Масштаб: Схема ↔ Истинный 1:1 (R)"><span aria-hidden="true">◎</span><span id="scaleLabel">Схема</span></button>
       <span class="sep sound-sep"></span>
       <button class="control-button toggle" id="soundToggle" aria-pressed="false" aria-label="Включить музыку (M)" title="Музыка (M)"><span class="sound-icon" id="soundIcon">🔇</span><span>Музыка</span></button>
       <button class="control-button settings-button" id="settingsButton" aria-haspopup="dialog" aria-expanded="false" aria-controls="settingsPanel" aria-label="Настройки" title="Настройки">⚙</button>
@@ -337,9 +378,14 @@
       <p class="settings-title">Настройки</p>
       <label class="settings-row" for="volumeRange"><span>Громкость музыки</span><span class="settings-value" id="volumeValue">60%</span>
         <input id="volumeRange" type="range" min="0" max="100" step="1" value="60" aria-label="Громкость музыки"></label>
-      <div class="settings-row"><span>Масштаб</span><span class="settings-value">R / Shift+R</span>
-        <div class="seg" id="scaleSeg" role="radiogroup" aria-label="Масштаб"><button type="button" role="radio" data-scale="0" title="Схема: размеры и расстояния условные">Схема</button><button type="button" role="radio" data-scale="1" title="Реальные расстояния, планеты ×500, Солнце ×20">Расстояния</button><button type="button" role="radio" data-scale="2" title="Реальные размеры и расстояния, 1 : 1">Истинный</button></div></div>
-      <p class="settings-note">Музыка генерируется в браузере (Web Audio API), без файлов. M — вкл / выкл, пауза приглушает звук. R — смена масштаба.</p>
+      <div class="settings-row"><span>Масштаб</span><span class="settings-value">R</span>
+        <div class="seg two" id="scaleSeg" role="radiogroup" aria-label="Масштаб"><button type="button" role="radio" data-scale="0" title="Схема: размеры и расстояния условные">Схема</button><button type="button" role="radio" data-scale="1" title="Реальные размеры и расстояния, 1 : 1">Истинный 1:1</button></div></div>
+      <div class="settings-row"><span>Свечение (bloom)</span><span class="settings-value">B</span>
+        <div class="seg" id="bloomSeg" role="radiogroup" aria-label="Свечение (bloom)" aria-describedby="bloomState"><button type="button" role="radio" data-bloom="auto" title="Авто: выключается на слабых видеокартах и при медленных кадрах">Авто</button><button type="button" role="radio" data-bloom="on" title="Свечение Солнца, короны и гейзеров Энцелада">Вкл</button><button type="button" role="radio" data-bloom="off" title="Без свечения — легче для видеокарты">Выкл</button></div>
+        <span class="settings-sub" id="bloomState">—</span></div>
+      <div class="settings-row"><span>Тени и затмения</span><span class="settings-value">меню</span>
+        <div class="seg two" id="shadowSeg" role="radiogroup" aria-label="Тени и затмения"><button type="button" role="radio" data-shadows="on" title="Тени спутников на планетах и затмения спутников">Вкл</button><button type="button" role="radio" data-shadows="off" title="Без теней спутников и затмений — чуть легче для видеокарты">Выкл</button></div></div>
+      <p class="settings-note">Музыка генерируется в браузере (Web Audio API), без файлов. M — вкл / выкл, пауза приглушает звук. R — масштаб «Схема» ↔ «1:1». B — свечение: Авто → Вкл → Выкл. Тени — только в этом меню и ?shadows=on|off.</p>
     </div>
     <div class="scale-hud" id="scaleHud" aria-hidden="true">
       <div class="scale-hud-mode" id="scaleHudMode">Схема</div>
@@ -347,11 +393,12 @@
       <div class="scale-hud-px" id="scaleHudPx">—</div>
       <div class="scale-hud-note" id="scaleHudNote">—</div>
     </div>
-    <div class="legend">Пробел — пауза · M — музыка · R — масштаб · 0–8 — объекты · ⇧1–4 / ⇧5–9 — луны Юпитера / Сатурна<br>5, 6 повторно — перебор лун · ← → — соседние · Esc — общий вид</div>
+    <div class="legend">Пробел — пауза · M — музыка · R — масштаб · B — свечение · 0–8 — объекты · ⇧1–4 / ⇧5–9 — луны Юпитера / Сатурна<br>5, 6 повторно — перебор лун · ← → — соседние · Esc — общий вид</div>
   </div>
 
   <div class="loupe" id="loupe" aria-hidden="true"><span class="loupe-mag" id="loupeMag"></span><span class="loupe-name" id="loupeName"></span></div>
   <span class="visually-hidden" id="scaleLive" aria-live="polite"></span>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -394,16 +441,45 @@
    *   · UI: кнопка 🔊/🔇, меню «Настройки» (⚙) с громкостью, клавиша M; состояние — localStorage «solar.audio».
    *
    * Этап 4 — реалистичные масштабы (блок «Этап 4» перед «Анимацией»):
-   *   · данные: BODIES[i].au / .rkm, MOONS[i].akm / .rkm, MOON_REAL; режим — scl.mode (0 / 1 / 2);
+   *   · данные: BODIES[i].au / .rkm, MOONS[i].akm / .rkm, MOON_REAL; режим — scl.mode (0 — схема / 1 — 1 : 1; с этапа 6);
    *   · layoutVec(m) строит вектор параметров режима, applyLayout(v) применяет его: b.sd (расстояние),
    *     b.ss (масштаб holder'а планеты вместе с лунами и кольцами), b.ak / b.mk (орбита / размер луны),
    *     sunS, пояса (updateBelts: схема ↔ а.е.); updateScale(dt) интерполирует и сохраняет кадр камеры;
    *   · worldR(b) / sizeK(b) — радиус в мире и множитель размера; flyTo, подписи, окклюзия, minDistance их учитывают;
    *   · точность: updateNear() (динамическая ближняя плоскость), шейдеры WORLD_VS / RING_VS / PLUME_VS
    *     используют modelViewMatrix; дальняя плоскость 6000;
-   *   · UI: R / Shift+R, кнопка «Масштаб», переключатель в «Настройках», индикатор (updateScaleHud),
+   *   · UI: R (туда-обратно), кнопка «Масштаб», переключатель в «Настройках», индикатор (updateScaleHud),
    *     блок карточки (updateScaleCard), маркеры (placeMarker), лупа (renderLoupe), плавное колесо (applyZoom),
    *     логарифмический перелёт с «подскоком» (logFlight); ?scale= — стартовый режим; отладка — __solar.scale() / setScale().
+   *
+   * Этап 5 — Bloom + ACES (блоки «Пост-обработка» и «Этап 5: свечение»):
+   *   · ACES — один GLSL-фрагмент ACES_GLSL (acesTonemap + toSRGB) для финального прохода (FinalShader) и лупы
+   *     (LOUPE_FS); яркость — FX_EXPOSURE (uExposure; в запасном режиме — renderer.toneMappingExposure, та же формула);
+   *   · цепочка: RenderPass (линейный HDR, half float) → GlowPass (выборочный bloom) → FinalShader: HDR + bloom × uBloom
+   *     → ACES → виньетка → sRGB → зерно. Bloom добавляется до tone mapping;
+   *   · выборочный bloom: renderBloomSource() рисует в bloomSrc только слой BLOOM_LAYER (sunMesh, coronaMesh, sunGlow,
+   *     шлейфы Энцелада), диски планет и лун — чёрными заслонками (bloomOccluders), затем штатный UnrealBloomPass
+   *     размывает; берётся его итоговая текстура renderTargetsHorizontal[0]. Параметры — объект BLOOM
+   *     (strength, radius, threshold, веса мипов, res = 0,5 на мобильных, fade = 0,3 с);
+   *   · Солнце в реалистичных масштабах: вклад диска и короны в источник bloom плавно передаётся спрайту sunGlow
+   *     (постоянный экранный размер) по мере того, как диск становится меньше пары пикселей, — субпиксельный диск
+   *     не мерцает; спрайт sunHaze приглушается на BLOOM.hazeCut при включённом bloom — без двойного ореола;
+   *   · режим: fx.mode (auto / on / off), setBloomMode, клавиша B / «И» (Shift — назад), ?bloom=, localStorage «solar.fx»;
+   *     Авто: autoReason() — программный рендеринг (WEBGL_debug_renderer_info), слабый GPU, нет пост-обработки;
+   *     fxMonitor: сглаженное время кадра > 28 мс 3 с подряд → fx.perfOff до конца визита + уведомление (toast);
+   *   · отладка: __solar.fx(), setBloom(m), setExposure(x), bloomParams({...}), fxSim({ hardware, frameMs }), fxFeed(ms, n),
+   *     disc(i), camPlace(pos, target).
+   *
+   * Этап 6 — два масштаба + тени и затмения:
+   *   · масштабы: режим «Реальные расстояния» удалён — SCALE_NAMES / layoutVec(m) знают только 0 (схема) и 1 (1 : 1);
+   *     ?scale=au|distance|2 → 1; __solar.setScale(2) — синоним 1;
+   *   · тени: SHADOW_GLSL (sunVisibility — доля диска Солнца, не закрытая сферами uOcc[]), addShadowRecv() встраивает его
+   *     в MeshStandardMaterial через onBeforeCompile (после lights_fragment_end умножается только прямой свет Солнца);
+   *     координаты — относительно центра системы (uShM считается в JS в double); setupShadows() — список приёмников,
+   *     updateShadows() — покадровые uniform'ы; угловой радиус Солнца uSunAng = min(геометрический, реальный);
+   *   · кольца: RING_FS и патч Сатурна — полутень по uSunAng;
+   *   · переключатель: sh.on, setShadows(), ?shadows=, поле "shadows" в «solar.fx» (saveFx сливает поля);
+   *   · отладка: __solar.shadows(), setShadows(on), align(key, 'shadow' | 'eclipse'), sunVis(key), camAt(key, k, ang, up), px(key), spot(key).
    */
   (() => {
     'use strict';
@@ -1011,26 +1087,34 @@
     const MOON_REAL = { akm: 384400, rkm: 1737.4 };
 
     /* ================================================================
-     *  Пост-обработка: HDR + bloom + ACES + виньетка + зерно
+     *  Пост-обработка (этап 5): HDR → выборочный bloom → ACES → виньетка → sRGB → зерно
+     *  ACES — один GLSL-фрагмент ACES_GLSL (та же формула, что ACESFilmicToneMapping в three.js r128)
+     *  для финального прохода и лупы; яркость — одна константа FX_EXPOSURE (и toneMappingExposure
+     *  в запасном режиме без пост-обработки). Bloom складывается с картинкой в линейном HDR до ACES.
      * ================================================================ */
+    const FX_EXPOSURE = 1.0;
+    const ACES_GLSL = `
+      uniform float uExposure;
+      vec3 rrtFit(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+      vec3 acesTonemap(vec3 c){
+        const mat3 inM = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
+        const mat3 outM = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
+        c *= uExposure / 0.6;
+        c = inM * c; c = rrtFit(c); c = outM * c; return clamp(c, 0.0, 1.0);
+      }
+      vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }`;
     const FinalShader = {
-      uniforms: { tDiffuse: { value: null }, uExposure: { value: 1.0 }, uTime: { value: 0 } },
+      uniforms: { tDiffuse: { value: null }, tBloom: { value: null }, uBloom: { value: 0 }, uExposure: { value: FX_EXPOSURE }, uTime: { value: 0 } },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `
-        uniform sampler2D tDiffuse; uniform float uExposure; uniform float uTime; varying vec2 vUv;
-        vec3 rrtFit(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
-        vec3 acesFilm(vec3 c){
-          const mat3 inM = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
-          const mat3 outM = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
-          c = inM * c; c = rrtFit(c); c = outM * c; return clamp(c, 0.0, 1.0);
-        }
-        vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+      fragmentShader: ACES_GLSL + `
+        uniform sampler2D tDiffuse; uniform sampler2D tBloom; uniform float uBloom; uniform float uTime; varying vec2 vUv;
         float grainHash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
         void main(){
           vec2 d = vUv - 0.5;
           float ca = dot(d, d) * 0.006;
           vec3 col = vec3(texture2D(tDiffuse, vUv + d * ca).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - d * ca).b);
-          col = acesFilm(col * uExposure / 0.6);
+          if (uBloom > 0.0) col += texture2D(tBloom, vUv).rgb * uBloom;   // bloom — в линейном HDR, до tone mapping
+          col = acesTonemap(col);
           float vig = smoothstep(1.05, 0.28, length(d * vec2(1.15, 1.0)));
           col *= mix(0.58, 1.0, vig);
           col = toSRGB(col);
@@ -1039,31 +1123,86 @@
         }
       `
     };
-    let composer = null, bloomPass = null, finalPass = null;
+    // Выборочный bloom: светятся только объекты слоя BLOOM_LAYER (Солнце, корона, звезда-Солнце, шлейфы Энцелада);
+    // диски планет и лун попадают в этот проход чёрными «заслонками». Порог по яркости тут не годится:
+    // освещённая Венера, кольца, огни городов и лава Ио в HDR не темнее короны.
+    const BLOOM_LAYER = 1;
+    const BLOOM = {
+      strength: 0.4,            // сила (анимируется от 0 при включении / выключении)
+      radius: 0.2,              // 0 — плотный ореол, 1 — широкий
+      threshold: 0.06,          // отсекает самый слабый край короны
+      factors: [1.0, 0.6, 0.3, 0.12, 0.04],   // веса мипов UnrealBloomPass (широкие мипы ослаблены — ореол не заливает соседей)
+      res: isMobile ? 0.5 : 1,  // разрешение источника bloom; на мобильных — половина
+      fade: 0.3,                // с, плавное включение / выключение
+      sunSrc: 0.25,             // вклад диска Солнца в источник (иначе диск вблизи пересвечен)
+      glowSrc: 0.45, glowSize: 0.6,   // вклад и размер спрайта sunGlow в источнике (реалистичные масштабы)
+      hazeCut: 0.55             // насколько приглушать спрайт-ореол sunHaze при включённом bloom (без двойного ореола)
+    };
+    let composer = null, bloomPass = null, finalPass = null, glowPass = null, bloomSrc = null, fxHalf = false;
     const hasExt = (n) => { try { return renderer.extensions.has ? renderer.extensions.has(n) : !!renderer.extensions.get(n); } catch (e) { return false; } };
-    if (THREE.EffectComposer && THREE.RenderPass && THREE.UnrealBloomPass && THREE.ShaderPass) {
+    const bloomBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const bloomOccluders = [];
+    const fxClear = new THREE.Color();
+    if (THREE.EffectComposer && THREE.RenderPass && THREE.UnrealBloomPass && THREE.ShaderPass && THREE.Pass) {
       try {
         const gl2 = renderer.capabilities.isWebGL2;
-        const half = gl2 && (hasExt('EXT_color_buffer_float') || hasExt('EXT_color_buffer_half_float'));
+        fxHalf = gl2 && (hasExt('EXT_color_buffer_float') || hasExt('EXT_color_buffer_half_float'));
         const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-        const params = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: half ? THREE.HalfFloatType : THREE.UnsignedByteType };
+        const params = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: fxHalf ? THREE.HalfFloatType : THREE.UnsignedByteType };
         const rt = (gl2 && THREE.WebGLMultisampleRenderTarget) ? new THREE.WebGLMultisampleRenderTarget(size.x, size.y, params) : new THREE.WebGLRenderTarget(size.x, size.y, params);
+        const bw = Math.max(2, Math.round(size.x * BLOOM.res)), bh = Math.max(2, Math.round(size.y * BLOOM.res));
+        bloomSrc = new THREE.WebGLRenderTarget(bw, bh, params);
+        bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(bw, bh), 1.0, BLOOM.radius, BLOOM.threshold);
+        bloomPass.compositeMaterial.uniforms.bloomFactors.value = BLOOM.factors.slice();
+        class GlowPass extends THREE.Pass {
+          constructor() { super(); this.needsSwap = false; this.enabled = false; }
+          setSize(w, h) {
+            const sw = Math.max(2, Math.round(w * BLOOM.res)), sh = Math.max(2, Math.round(h * BLOOM.res));
+            bloomSrc.setSize(sw, sh); bloomPass.setSize(sw, sh);
+          }
+          render(r, writeBuffer, readBuffer, dt) { renderBloomSource(); bloomPass.render(r, null, bloomSrc, dt, false); }
+        }
         composer = new THREE.EffectComposer(renderer, rt);
         composer.setPixelRatio(PR); composer.setSize(innerWidth, innerHeight);
         composer.addPass(new THREE.RenderPass(scene, camera));
-        bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.55, 1.0);
-        composer.addPass(bloomPass);
+        glowPass = new GlowPass();
+        composer.addPass(glowPass);
         finalPass = new THREE.ShaderPass(FinalShader);
+        finalPass.uniforms.tBloom.value = bloomPass.renderTargetsHorizontal[0].texture;   // итог UnrealBloomPass до его собственного смешивания
         composer.addPass(finalPass);
         renderer.toneMapping = THREE.NoToneMapping;
-      } catch (e) { console.warn('Post-processing disabled:', e); composer = null; }
+      } catch (e) { console.warn('Post-processing disabled:', e); composer = null; glowPass = null; bloomPass = null; }
     }
-    if (!composer) { renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0; }
+    if (!composer) { renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = FX_EXPOSURE; }
+
+    // Источник bloom: только слой BLOOM_LAYER, заслонки — чёрные; вклад диска Солнца плавно передаётся спрайту sunGlow,
+    // когда диск становится меньше пары пикселей (субпиксельный диск в bloom мерцал бы)
+    function renderBloomSource() {
+      const a = sunGlowA, iSun = sunMat.uniforms.uIntensity.value;
+      sunMat.uniforms.uIntensity.value = iSun * BLOOM.sunSrc * (1 - a);
+      coronaMat.uniforms.uGain.value = 1 - a;
+      const gO = sunGlow.material.opacity, gS = sunGlow.scale.x;
+      if (sunGlow.visible) { sunGlow.material.opacity = gO * BLOOM.glowSrc; sunGlow.scale.set(gS * BLOOM.glowSize, gS * BLOOM.glowSize, 1); }
+      plumeMats.forEach((m) => { m.uniforms.uPx.value *= BLOOM.res; });
+      for (let i = 0; i < bloomOccluders.length; i++) { const m = bloomOccluders[i]; m.userData.fxMat = m.material; m.material = bloomBlack; }
+      renderer.getClearColor(fxClear); const ca = renderer.getClearAlpha();
+      camera.layers.set(BLOOM_LAYER);
+      renderer.setRenderTarget(bloomSrc); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
+      camera.layers.set(0);
+      renderer.setClearColor(fxClear, ca);
+      for (let i = 0; i < bloomOccluders.length; i++) { const m = bloomOccluders[i]; m.material = m.userData.fxMat; }
+      plumeMats.forEach((m) => { m.uniforms.uPx.value /= BLOOM.res; });
+      sunGlow.material.opacity = gO; sunGlow.scale.set(gS, gS, 1);
+      sunMat.uniforms.uIntensity.value = iSun; coronaMat.uniforms.uGain.value = 1;
+    }
 
     /* ================================================================
      *  Шейдеры объектов
      * ================================================================ */
-    const OUT = `\n#include <tonemapping_fragment>\n#include <encodings_fragment>\n`;
+    const OUT = `
+#include <tonemapping_fragment>
+#include <encodings_fragment>
+`;
     const WORLD_VS = `
       varying vec3 vNormalW; varying vec3 vWorld; varying vec3 vPos;
       void main(){ vPos = position; vNormalW = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
@@ -1093,7 +1232,7 @@
 
     const CORONA_VS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
     const CORONA_FS = NOISE + `
-      uniform float uTime; uniform float uSpan; varying vec2 vUv;
+      uniform float uTime; uniform float uSpan; uniform float uGain; varying vec2 vUv;
       void main(){
         vec2 c = vUv * 2.0 - 1.0; float r = length(c) * uSpan;
         if (r > uSpan) discard;
@@ -1106,7 +1245,7 @@
         float fall = exp(-rr * 2.3);
         float edge = smoothstep(uSpan, uSpan * 0.6, r);
         vec3 col = mix(vec3(1.0, 0.34, 0.05), vec3(1.0, 0.78, 0.45), exp(-rr * 4.0));
-        gl_FragColor = vec4(col * fall * streak * edge * 0.8, 1.0);
+        gl_FragColor = vec4(col * fall * streak * edge * 0.8 * uGain, 1.0);
       ` + OUT + `}`;
 
     const ATMO_OUT_FS = `
@@ -1134,7 +1273,7 @@
       varying vec3 vWorld; varying vec3 vNormalW; varying float vR;
       void main(){ vR = length(position.xy); vNormalW = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
     const RING_FS = `
-      uniform sampler2D uTex; uniform vec3 uPlanetPos; uniform float uPlanetR; uniform float uInner; uniform float uOuter; uniform float uOpacity;
+      uniform sampler2D uTex; uniform vec3 uPlanetPos; uniform float uPlanetR; uniform float uInner; uniform float uOuter; uniform float uOpacity; uniform float uSunAng; uniform float uPlanetSh;
       varying vec3 vWorld; varying vec3 vNormalW; varying float vR;
       void main(){
         float u = (vR - uInner) / (uOuter - uInner);
@@ -1145,7 +1284,8 @@
         float lit = mix(mix(0.5, 0.1, t.a), 1.0, sameSide);
         vec3 oc = vWorld - uPlanetPos; float b = dot(oc, L);
         float dist = sqrt(max(dot(oc, oc) - b * b, 0.0));
-        float sh = b < 0.0 ? smoothstep(uPlanetR * 0.97, uPlanetR * 1.03, dist) : 1.0;
+        float pw = max(uSunAng * -b, uPlanetR * 0.002);           // этап 6: полутень по угловому радиусу Солнца
+        float sh = mix(1.0, b < 0.0 ? smoothstep(uPlanetR - pw, uPlanetR + pw, dist) : 1.0, uPlanetSh);
         float fwd = pow(max(dot(-V, L), 0.0), 8.0) * (1.0 - t.a) * 1.5;
         vec3 c = col * (0.05 + 0.85 * (lit + fwd) * sh);
         gl_FragColor = vec4(c, a);
@@ -1230,6 +1370,7 @@
     const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpV3 = new THREE.Vector3(), tmpV4 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
     const bodies = [];
     let sunMat, coronaMat, coronaMesh, sunMesh, saturnRingMat = null, saturnPatchUniforms = null, saturnBody = null, uranusRingMat = null, uranusBody = null;
+    let sunGlowA = 0;   // этап 5: текущая непрозрачность спрайта «звезда-Солнце» (для источника bloom)
     let starMat, sky, starField, asteroids, beltDust, kuiper, moon, moonPivot, earthBody, sunHaze, sunGlow, astData;
 
     async function build() {
@@ -1309,7 +1450,7 @@
       sunMesh = new THREE.Mesh(new THREE.SphereGeometry(BODIES[0].radius, 128, 64), sunMat);
       scene.add(sunMesh);
       const span = 3.8;
-      coronaMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uSpan: { value: span } }, vertexShader: CORONA_VS, fragmentShader: CORONA_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+      coronaMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uSpan: { value: span }, uGain: { value: 1 } }, vertexShader: CORONA_VS, fragmentShader: CORONA_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
       coronaMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), coronaMat);
       coronaMesh.scale.setScalar(BODIES[0].radius * span * 2);
       scene.add(coronaMesh);
@@ -1334,6 +1475,11 @@
 
       // --- спутники планет
       MOONS.forEach((d) => bodies.push(makeMoon(d, bodies.length)));
+      setupShadows();   // этап 6
+
+      // --- этап 5: слой bloom — Солнце, корона, звезда-Солнце (+ шлейфы в addPlumes); диски планет и лун — заслонки
+      [sunMesh, coronaMesh, sunGlow].forEach((o) => o.layers.enable(BLOOM_LAYER));
+      bodies.slice(1).map((b) => b.mesh).concat([moon]).forEach((m) => { m.layers.enable(BLOOM_LAYER); bloomOccluders.push(m); });
 
       buildAsteroids();
       buildLabelsAndNav();
@@ -1375,17 +1521,20 @@
         const inner = d.radius * 1.24, outer = d.radius * 2.35, rt = ringTexture('saturn');
         saturnRingMat = makeRing(holder, rt, inner, outer, d.radius, 1.0);
         saturnBody = body;
-        saturnPatchUniforms = { uRingTex: { value: rt }, uRingN: { value: new THREE.Vector3(0, 1, 0) }, uRingC: { value: new THREE.Vector3() }, uRingIn: { value: inner }, uRingOut: { value: outer } };
+        saturnPatchUniforms = { uRingTex: { value: rt }, uRingN: { value: new THREE.Vector3(0, 1, 0) }, uRingC: { value: new THREE.Vector3() }, uRingIn: { value: inner }, uRingOut: { value: outer }, uRingSh: { value: 1 } };   // uRingSh — отладка (тест: тень колец вкл/выкл)
         mat.onBeforeCompile = function (shader) {
           Object.assign(shader.uniforms, saturnPatchUniforms);
           shader.vertexShader = 'varying vec3 vWPos;\n' + shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-          shader.fragmentShader = 'varying vec3 vWPos;\nuniform sampler2D uRingTex; uniform vec3 uRingN; uniform vec3 uRingC; uniform float uRingIn; uniform float uRingOut;\n' +
+          shader.fragmentShader = 'varying vec3 vWPos;\nuniform sampler2D uRingTex; uniform vec3 uRingN; uniform vec3 uRingC; uniform float uRingIn; uniform float uRingOut; uniform float uRingSh;\n' +   // uSunAng объявлен в SHADOW_GLSL (этап 6)
             shader.fragmentShader.replace('#include <lights_fragment_end>', [
               '#include <lights_fragment_end>',
               '{ vec3 Ls = normalize(-vWPos); float den = dot(Ls, uRingN);',
               '  if (abs(den) > 1e-4) { float tt = dot(uRingC - vWPos, uRingN) / den;',
               '    if (tt > 0.0) { vec3 hp = vWPos + Ls * tt; float uu = (length(hp - uRingC) - uRingIn) / (uRingOut - uRingIn);',
-              '      if (uu > 0.0 && uu < 1.0) { float ra = texture2D(uRingTex, vec2(uu, 0.5)).a; float shade = 1.0 - ra * 0.85;',
+              '      float du = uSunAng * tt / (uRingOut - uRingIn);',   // этап 6: полутень колец по угловому радиусу Солнца
+              '      if (uu > -du && uu < 1.0 + du) { float ra = (texture2D(uRingTex, vec2(clamp(uu, 0.0, 1.0), 0.5)).a * step(0.0, uu) * step(uu, 1.0)',
+              '          + texture2D(uRingTex, vec2(clamp(uu - du, 0.0, 1.0), 0.5)).a * step(0.0, uu - du) * step(uu - du, 1.0)',
+              '          + texture2D(uRingTex, vec2(clamp(uu + du, 0.0, 1.0), 0.5)).a * step(0.0, uu + du) * step(uu + du, 1.0)) / 3.0; float shade = 1.0 - ra * 0.85 * uRingSh;',
               '        reflectedLight.directDiffuse *= shade; reflectedLight.directSpecular *= shade; } } } }'
             ].join('\n'));
         };
@@ -1417,7 +1566,7 @@
       pick.visible = false; pick.userData.moon = true; mesh.add(pick);
       const body = { index, data: d, parentBody: parent, plane, holder: plane, mesh, pick, clouds: null, theta: (d.lambda - d.node) * DEG, hi: 0, fade: 0 };
       body.orbit = makeMoonOrbit(plane, d);
-      if (d.haze) addTitanHaze(mesh, d.radius);
+      if (d.haze) { addTitanHaze(mesh, d.radius); titanBody = body; }
       if (d.plumes) addPlumes(mesh, d.radius);
       body.getPos = (v) => mesh.getWorldPosition(v);
       (parent.moons = parent.moons || []).push(body);
@@ -1476,6 +1625,7 @@
         vertexShader: WORLD_VS, fragmentShader: HAZE_BLUE_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
       haze.renderOrder = 1; blue.renderOrder = 2;
       mesh.add(haze, blue);
+      titanHaze = [haze.material, blue.material];   // этап 6: дымка темнеет в тени Сатурна
     }
 
     /* ---- Этап 2: гейзерные шлейфы Энцелада — частицы вылетают из 4 «тигровых полос» (координаты как в BAKE_FS) */
@@ -1524,7 +1674,7 @@
       const m = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uPx: { value: 500 }, uR: { value: r } },
         vertexShader: PLUME_VS, fragmentShader: PLUME_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
       const pts = new THREE.Points(g, m);
-      pts.frustumCulled = false; pts.renderOrder = 3;
+      pts.frustumCulled = false; pts.renderOrder = 3; pts.layers.enable(BLOOM_LAYER);   // этап 5: шлейфы светятся
       mesh.add(pts); plumeMats.push(m);
     }
 
@@ -1542,12 +1692,125 @@
 
     function makeRing(holder, rtex, inner, outer, planetR, opacity) {
       const m = new THREE.ShaderMaterial({
-        uniforms: { uTex: { value: rtex }, uPlanetPos: { value: new THREE.Vector3() }, uPlanetR: { value: planetR }, uInner: { value: inner }, uOuter: { value: outer }, uOpacity: { value: opacity } },
+        uniforms: { uTex: { value: rtex }, uPlanetPos: { value: new THREE.Vector3() }, uPlanetR: { value: planetR }, uInner: { value: inner }, uOuter: { value: outer }, uOpacity: { value: opacity }, uSunAng: { value: 0.005 }, uPlanetSh: { value: 1 } },
         vertexShader: RING_VS, fragmentShader: RING_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide });
       const ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 256, 1), m);
       ring.rotation.x = -Math.PI / 2;
       holder.add(ring);
       return m;
+    }
+
+    /* ---- Этап 6: аналитические тени и затмения (без shadow map и без дополнительных проходов рендера)
+     *  Каждый приёмник (планета, её облака, луна) знает до SH_MAX сфер-затенителей. Для точки поверхности
+     *  считается доля видимого диска Солнца: перекрытие двух дисков по угловым радиусам Солнца и затенителя —
+     *  получаются тень и полутень. Координаты — относительно центра системы планеты (матрица uShM собирается
+     *  в JS в double), поэтому точности float хватает и для тени Ио в масштабе 1 : 1.
+     *  Угловой радиус Солнца — геометрический, но не больше реального (в схеме Солнце огромное и близкое —
+     *  без ограничения тени расплылись бы в пятно). Тень умножает только прямой свет Солнца:
+     *  огни городов, лава Ио и рассеянный свет не гаснут. */
+    const SH_MAX = 6, SUN_RKM = 696000;
+    const shadowOn = { value: 1 };
+    const shadowRecv = [];
+    const SHADOW_GLSL = `
+      uniform vec4 uOcc[${SH_MAX}]; uniform float uOccN; uniform vec3 uSunRel; uniform float uSunAng; uniform float uShadowOn;
+      varying vec3 vShRel;
+      float discCover(float r1, float r2, float d) {          // доля диска r1, закрытая диском r2 на расстоянии d
+        if (d >= r1 + r2) return 0.0;
+        if (d <= abs(r2 - r1)) return r2 >= r1 ? 1.0 : (r2 * r2) / (r1 * r1);
+        float a = r1 * r1, b = r2 * r2;
+        float x = (d * d + a - b) / (2.0 * d), y = d - x;
+        float A = a * acos(clamp(x / r1, -1.0, 1.0)) - x * sqrt(max(a - x * x, 0.0)) + b * acos(clamp(y / r2, -1.0, 1.0)) - y * sqrt(max(b - y * y, 0.0));
+        return clamp(A / (3.14159265 * a), 0.0, 1.0);
+      }
+      float sunVisibility(vec3 P) {
+        vec3 toS = uSunRel - P; float dS = length(toS); vec3 Ls = toS / dS;
+        float vis = 1.0;
+        for (int i = 0; i < ${SH_MAX}; i++) {
+          if (float(i) >= uOccN) break;
+          vec3 oc = uOcc[i].xyz - P; float along = dot(oc, Ls);
+          if (along <= 0.0 || along >= dS) continue;
+          float dO = length(oc);
+          float aO = asin(min(uOcc[i].w / dO, 1.0));
+          float sep = atan(length(cross(oc, Ls)), along);   // точнее acos при малых углах
+          vis *= 1.0 - discCover(uSunAng, aO, sep);
+        }
+        return mix(1.0, vis, uShadowOn);
+      }
+    `;
+    // приёмник тени: mesh — сетка с MeshStandardMaterial, sys — тело-центр системы, occ — затенители { pos(v), r() }
+    function addShadowRecv(mesh, sys, occ, tag) {
+      const U = { uShM: { value: new THREE.Matrix4() }, uOcc: { value: Array.from({ length: SH_MAX }, () => new THREE.Vector4()) }, uOccN: { value: 0 },
+        uSunRel: { value: new THREE.Vector3() }, uSunAng: { value: 0.005 }, uShadowOn: shadowOn };
+      const mat = mesh.material, prev = mat.onBeforeCompile;
+      mat.onBeforeCompile = function (shader, r) {
+        if (prev) prev.call(this, shader, r);
+        Object.assign(shader.uniforms, U);
+        shader.vertexShader = 'uniform mat4 uShM;\nvarying vec3 vShRel;\n' + shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvShRel = (uShM * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = SHADOW_GLSL + shader.fragmentShader.replace('#include <lights_fragment_end>',
+          '#include <lights_fragment_end>\n{ float shV = sunVisibility(vShRel); reflectedLight.directDiffuse *= shV; reflectedLight.directSpecular *= shV; }');
+      };
+      mat.customProgramCacheKey = () => 'solar-shadow|' + tag;   // разные патчи — разные программы
+      mat.needsUpdate = true;
+      const sysD = sys.data;
+      shadowRecv.push({ mesh, sys, occ: occ.slice(0, SH_MAX), U, sunAng: SUN_RKM / (sysD.au * AU_KM) });
+    }
+    function setupShadows() {
+      const E = earthBody;
+      const bodyOcc = (b) => ({ key: b.data.key, pos: (v) => b.getPos(v), r: () => worldR(b) });
+      const moonOcc = { key: 'moon', pos: (v) => moon.getWorldPosition(v), r: () => 0.17 * moon.scale.x * E.ss };
+      addShadowRecv(E.mesh, E, [moonOcc], 'earth');
+      if (E.clouds) addShadowRecv(E.clouds, E, [moonOcc], 'clouds');
+      addShadowRecv(moon, E, [bodyOcc(E)], 'moon');
+      bodies.slice(1, PLANET_COUNT).forEach((p) => {
+        if (!p.moons) return;
+        addShadowRecv(p.mesh, p, p.moons.map(bodyOcc), p === saturnBody ? 'saturn' : 'planet');
+        if (p.clouds) addShadowRecv(p.clouds, p, p.moons.map(bodyOcc), 'clouds');
+        p.moons.forEach((m) => addShadowRecv(m.mesh, p, [bodyOcc(p)].concat(p.moons.filter((x) => x !== m).map(bodyOcc)), 'moon'));
+      });
+    }
+    // доля видимого диска Солнца в точке P (мир) — та же формула на CPU (дымка Титана, отладка)
+    function discCoverJS(r1, r2, d) {
+      if (d >= r1 + r2) return 0;
+      if (d <= Math.abs(r2 - r1)) return r2 >= r1 ? 1 : (r2 * r2) / (r1 * r1);
+      const a = r1 * r1, b = r2 * r2, x = (d * d + a - b) / (2 * d), y = d - x;
+      const A = a * Math.acos(Math.max(-1, Math.min(1, x / r1))) - x * Math.sqrt(Math.max(a - x * x, 0)) + b * Math.acos(Math.max(-1, Math.min(1, y / r2))) - y * Math.sqrt(Math.max(b - y * y, 0));
+      return Math.max(0, Math.min(1, A / (Math.PI * a)));
+    }
+    const shC = new THREE.Vector3(), shP = new THREE.Vector3(), shQ = new THREE.Vector3(), shX = new THREE.Vector3();
+    function sunVisJS(P, occ, sunAng) {
+      const dS = P.length(); let vis = 1;
+      occ.forEach((o) => {
+        o.pos(shQ).sub(P); const along = -shQ.dot(P) / dS;
+        if (along <= 0 || along >= dS) return;
+        const dO = shQ.length(), aO = Math.asin(Math.min(o.r() / dO, 1));
+        const sep = Math.atan2(shX.copy(shQ).cross(P).length() / dS, along);
+        vis *= 1 - discCoverJS(sunAng, aO, sep);
+      });
+      return vis;
+    }
+    let titanHaze = null, titanBody = null;
+    function updateShadows() {
+      shadowOn.value = shadowsEnabled() ? 1 : 0;
+      const sunR = worldR(bodies[0]);
+      for (let i = 0; i < shadowRecv.length; i++) {
+        const rc = shadowRecv[i], U = rc.U;
+        rc.sys.getPos(shC);
+        rc.mesh.updateWorldMatrix(true, false);
+        const e = U.uShM.value.copy(rc.mesh.matrixWorld).elements;
+        e[12] -= shC.x; e[13] -= shC.y; e[14] -= shC.z;
+        U.uSunRel.value.copy(shC).negate();
+        U.uSunAng.value = Math.min(sunR / Math.max(shC.length(), 1e-9), rc.sunAng);
+        for (let k = 0; k < rc.occ.length; k++) { const o = rc.occ[k]; o.pos(shP).sub(shC); U.uOcc.value[k].set(shP.x, shP.y, shP.z, o.r()); }
+        U.uOccN.value = rc.occ.length;
+      }
+      if (titanHaze && titanBody) {
+        const rc = shadowRecv.find((r) => r.mesh === titanBody.mesh);
+        const v = shadowOn.value ? sunVisJS(titanBody.getPos(shP), rc.occ, rc.U.uSunAng.value) : 1;
+        titanHaze.forEach((m) => { m.uniforms.uSun.value = 0.95 * v; });
+      }
+      [[saturnRingMat, saturnBody], [uranusRingMat, uranusBody]].forEach(([m, b]) => {
+        if (m && b) m.uniforms.uSunAng.value = Math.min(sunR / Math.max(b.holder.position.length(), 1e-9), SUN_RKM / (b.data.au * AU_KM));
+      });
     }
 
     function makeOrbit(radius, color, planetR) {
@@ -2113,9 +2376,137 @@
     });
 
     /* ================================================================
+     *  Этап 5: свечение (bloom) — режим Авто / Вкл / Выкл, клавиша B («И»), ?bloom=, localStorage «solar.fx»
+     *  Авто выключает bloom на программном рендеринге и слабых GPU, а также если кадр дольше 28 мс
+     *  держится 3 с (после этого Авто не включает bloom до конца визита — без мерцания вкл/выкл).
+     * ================================================================ */
+    const FX_KEY = 'solar.fx', BLOOM_MODES = ['auto', 'on', 'off'];
+    // этап 6: в «solar.fx» хранятся и свечение, и тени — запись сливается с уже сохранёнными полями
+    function saveFx(patch) {
+      try { let o = JSON.parse(localStorage.getItem(FX_KEY) || 'null'); if (!o || typeof o !== 'object') o = {}; localStorage.setItem(FX_KEY, JSON.stringify(Object.assign(o, patch))); } catch (e) {}
+    }
+    const BLOOM_NAMES = { auto: 'Авто', on: 'Вкл', off: 'Выкл' };
+    const FX_SLOW_MS = 28, FX_SLOW_S = 3, FX_WARM_S = 2;
+    const SOFT_GPU_RE = /swiftshader|subzero|llvmpipe|lavapipe|softpipe|software|basic render|mesa offscreen|offscreen/i;
+    const fx = (() => {
+      let gpu = '';
+      try {
+        const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+        gpu = ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) + ' / ' + gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.VENDOR) + ' / ' + gl.getParameter(gl.RENDERER);
+      } catch (e) {}
+      const caps = renderer.capabilities;
+      const st = { mode: 'auto', fromUrl: false, available: !!(composer && glowPass), gpu: String(gpu), software: SOFT_GPU_RE.test(gpu),
+        weak: (!caps.isWebGL2 && isMobile) || caps.maxTextureSize < 4096, perfOff: false, k: 0, e: 0,
+        ema: 0, slowFor: 0, warm: 0, frameMs: 0, simMs: null, toastText: '', toastCount: 0 };
+      let stored = null;
+      try { const o = JSON.parse(localStorage.getItem(FX_KEY) || 'null'); if (o && BLOOM_MODES.includes(o.bloom)) stored = o.bloom; } catch (e) {}
+      const q = (new URLSearchParams(location.search).get('bloom') || '').toLowerCase();
+      if (BLOOM_MODES.includes(q)) { st.mode = q; st.fromUrl = true; } else if (stored) st.mode = stored;
+      return st;
+    })();
+    // причина, по которой Авто держит bloom выключенным (null — Авто включает bloom)
+    function autoReason() {
+      if (!fx.available) return 'нет пост-обработки';
+      if (fx.software) return 'программный рендеринг';
+      if (fx.weak) return 'слабая видеокарта';
+      if (fx.perfOff) return 'медленные кадры';
+      return null;
+    }
+    const bloomWanted = () => fx.available && (fx.mode === 'on' || (fx.mode === 'auto' && !autoReason()));
+    function bloomStateText() {
+      if (!fx.available) return 'Недоступно: пост-обработка не загрузилась';
+      if (fx.mode === 'auto') { const r = autoReason(); return r ? 'Авто: выключено — ' + r : 'Авто: включено'; }
+      return fx.mode === 'on' ? 'Включено вручную' : 'Выключено вручную';
+    }
+    const toastEl = $('toast'); let toastTimer = 0;
+    function toast(msg, ms) {
+      fx.toastText = msg; fx.toastCount++;
+      toastEl.textContent = msg; toastEl.classList.add('on');
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove('on'), ms || 2600);
+    }
+    const bloomSeg = Array.from(document.querySelectorAll('#bloomSeg button'));
+    function fxUI() {
+      bloomSeg.forEach((b) => {
+        const on = b.dataset.bloom === fx.mode;
+        b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
+        b.disabled = !fx.available; b.setAttribute('aria-disabled', String(!fx.available));
+      });
+      $('bloomSeg').setAttribute('aria-disabled', String(!fx.available));
+      $('bloomState').textContent = bloomStateText();
+    }
+    function setBloomMode(m, viaKey) {
+      if (!BLOOM_MODES.includes(m)) return;
+      if (!fx.available) { if (viaKey) toast('Свечение недоступно: пост-обработка не загрузилась'); fxUI(); return; }
+      fx.mode = m;
+      saveFx({ bloom: m });
+      fxUI();
+      if (viaKey) toast('Свечение: ' + BLOOM_NAMES[m] + (m === 'auto' ? (autoReason() ? ' (выключено — ' + autoReason() + ')' : ' (включено)') : ''));
+    }
+    bloomSeg.forEach((b) => b.addEventListener('click', () => setBloomMode(b.dataset.bloom)));
+    addEventListener('keydown', (e) => {
+      if (!window.__solar.ready || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code !== 'KeyB' && !/^[bи]$/i.test(e.key || '')) return;     // B и «И» в русской раскладке
+      const tg = e.target;
+      if (tg && ((tg.tagName === 'INPUT' && tg.type !== 'range') || tg.tagName === 'TEXTAREA' || tg.isContentEditable)) return;
+      e.preventDefault();
+      setBloomMode(BLOOM_MODES[(BLOOM_MODES.indexOf(fx.mode) + (e.shiftKey ? 2 : 1)) % 3], true);
+    });
+
+    /* ================================================================
+     *  Этап 6: тени и затмения — Вкл / Выкл в «Настройках», ?shadows=on|off, поле "shadows" в «solar.fx».
+     *  Горячей клавиши нет (решение владельца). По умолчанию включены везде, включая мобильные.
+     * ================================================================ */
+    const sh = (() => {
+      const st = { on: true, fromUrl: false };
+      try { const o = JSON.parse(localStorage.getItem(FX_KEY) || 'null'); if (o && (o.shadows === 'on' || o.shadows === 'off')) st.on = o.shadows === 'on'; } catch (e) {}
+      const q = (new URLSearchParams(location.search).get('shadows') || '').toLowerCase();
+      if (q === 'on' || q === 'off') { st.on = q === 'on'; st.fromUrl = true; }
+      return st;
+    })();
+    const shadowsEnabled = () => sh.on;
+    const shadowSeg = Array.from(document.querySelectorAll('#shadowSeg button'));
+    function shadowUI() {
+      shadowSeg.forEach((b) => { const on = (b.dataset.shadows === 'on') === sh.on; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+    }
+    function setShadows(on) { sh.on = !!on; saveFx({ shadows: sh.on ? 'on' : 'off' }); shadowUI(); }
+    shadowSeg.forEach((b) => b.addEventListener('click', () => setShadows(b.dataset.shadows === 'on')));
+    shadowUI();
+    fxUI();
+    if (fx.available && fx.mode === 'auto' && autoReason()) console.info('Bloom (Авто) выключен: ' + autoReason() + ' — ' + fx.gpu);
+
+    // покадрово: плавное включение / выключение (0,3 с), при нуле проход bloom не выполняется вовсе
+    function updateFx(dt) {
+      const target = bloomWanted() ? 1 : 0;
+      if (fx.k !== target) fx.k = reduceMotion ? target : Math.min(1, Math.max(0, fx.k + Math.sign(target - fx.k) * dt / BLOOM.fade));
+      fx.e = fx.k * fx.k * (3 - 2 * fx.k);
+      if (glowPass) glowPass.enabled = fx.k > 0;
+      if (finalPass) finalPass.uniforms.uBloom.value = fx.k > 0 ? BLOOM.strength * fx.e : 0;
+      sunHaze.material.opacity = 0.26 * (1 - BLOOM.hazeCut * fx.e);
+    }
+    // контроль времени кадра — только в Авто и только пока bloom включён полностью
+    function fxMonitor(ms) {
+      fx.frameMs = ms;
+      if (fx.mode !== 'auto' || fx.perfOff || fx.k < 1 || document.hidden) { fx.warm = 0; fx.slowFor = 0; fx.ema = 0; return; }
+      if (!(ms > 0) || ms > 1000) return;                      // вкладка была скрыта / разовая пауза — не считаем
+      fx.warm += ms / 1000;
+      if (fx.warm < FX_WARM_S) return;                         // компиляция шейдеров и прогрев после включения
+      fx.ema = fx.ema ? fx.ema + (ms - fx.ema) * 0.1 : ms;
+      fx.slowFor = fx.ema > FX_SLOW_MS ? fx.slowFor + ms / 1000 : 0;
+      if (fx.slowFor >= FX_SLOW_S) {
+        fx.perfOff = true; fx.slowFor = 0; fxUI();
+        toast('Свечение (bloom) выключено: кадр дольше ' + FX_SLOW_MS + ' мс. Включить вручную — клавиша B или ⚙ Настройки', 5200);
+      }
+    }
+    function setExposure(x) {
+      if (finalPass) finalPass.uniforms.uExposure.value = x;
+      if (loupeMat) loupeMat.uniforms.uExposure.value = x;
+      renderer.toneMappingExposure = x;
+    }
+
+    /* ================================================================
      *  Этап 4: реалистичные масштабы
-     *  0 — схема (как раньше); 1 — реальные расстояния (1 а.е. = 10 ед., планеты ×500, Солнце ×20);
-     *  2 — реальные размеры и расстояния (всё 1 : 1).
+     *  0 — схема (как раньше); 1 — реальные размеры и расстояния (всё 1 : 1; 1 а.е. = 10 ед.).
+     *  Этап 6: промежуточный режим «Реальные расстояния» (планеты ×500, Солнце ×20) убран.
      *  Состояние сцены — вектор параметров (расстояния планет, масштаб каждой «системы планеты» целиком,
      *  орбиты и размеры лун, пояса, размер пыли). Переход — интерполяция вектора за 1,5 с; размеры
      *  интерполируются в логарифмическом пространстве (иначе мгновенно «схлопываются»).
@@ -2123,10 +2514,11 @@
      *  в общем виде — вместе с охватом системы. Ближняя плоскость отсечения подстраивается под
      *  расстояние до ближайшей поверхности (глубина остаётся точной и для Мимаса в 1 : 1).
      * ================================================================ */
-    const AU_KM = 149597870.7, U_AU = 10, U_KM = U_AU / AU_KM, SIZE_X = 500, SUN_X = 20, SCALE_DUR = 1.5, CORONA_SPAN = 3.8, C_KMS = 299792.458;
-    const SCALE_NAMES = ['Схема', 'Реальные расстояния', 'Реальные размеры и расстояния'];
-    const SCALE_SHORT = ['Схема', 'Расстояния', 'Истинный'];
-    const SCALE_NOTES = ['Размеры и расстояния условные', 'Расстояния 1 : 1 · планеты ×500, Солнце ×20', 'Размеры и расстояния 1 : 1'];
+    const AU_KM = 149597870.7, U_AU = 10, U_KM = U_AU / AU_KM, ROCK_TRUE = 1 / 500, SCALE_DUR = 1.5, CORONA_SPAN = 3.8, C_KMS = 299792.458;
+    const SCALE_NAMES = ['Схема', 'Истинный 1:1'];
+    const SCALE_SHORT = ['Схема', '1:1'];
+    const SCALE_NOTES = ['Размеры и расстояния условные', 'Размеры и расстояния 1 : 1'];
+    const SCALE_N = SCALE_NAMES.length;
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const scl = { mode: 0, t: 1, from: null, to: null, cur: null };
     const isLog = [];
@@ -2153,17 +2545,17 @@
     function layoutVec(m) {
       const v = []; isLog.length = 0;
       const P = (x, lg) => { v.push(x); isLog.push(!!lg); };
-      for (let i = 1; i < PLANET_COUNT; i++) { const d = bodies[i].data; P(m ? d.au * U_AU : d.distance, false); P(m ? d.rkm * U_KM * (m === 1 ? SIZE_X : 1) / d.radius : 1, true); }
-      const S = BODIES[0]; P(m ? S.rkm * U_KM * (m === 1 ? SUN_X : 1) / S.radius : 1, true);
+      for (let i = 1; i < PLANET_COUNT; i++) { const d = bodies[i].data; P(m ? d.au * U_AU : d.distance, false); P(m ? d.rkm * U_KM / d.radius : 1, true); }
+      const S = BODIES[0]; P(m ? S.rkm * U_KM / S.radius : 1, true);
       for (let i = PLANET_COUNT; i < bodies.length; i++) {
         const d = bodies[i].data, p = bodies[i].parentBody.data;
-        P(m === 2 ? (d.akm / p.rkm * p.radius) / d.a : 1, true);          // орбита: в 1 : 1 — реальное отношение a / R планеты
-        P(m === 2 ? (d.rkm / p.rkm) * (p.radius / d.radius) : 1, true);   // размер луны относительно планеты
+        P(m ? (d.akm / p.rkm * p.radius) / d.a : 1, true);          // орбита: в 1 : 1 — реальное отношение a / R планеты
+        P(m ? (d.rkm / p.rkm) * (p.radius / d.radius) : 1, true);   // размер луны относительно планеты
       }
       const E = earthBody.data;
-      P(m === 2 ? (MOON_REAL.akm / E.rkm * E.radius) / 1.3 : 1, true); P(m === 2 ? (MOON_REAL.rkm / E.rkm) * (E.radius / 0.17) : 1, true);
+      P(m ? (MOON_REAL.akm / E.rkm * E.radius) / 1.3 : 1, true); P(m ? (MOON_REAL.rkm / E.rkm) * (E.radius / 0.17) : 1, true);
       P(m ? 1 : 0, false);                                                // пояса: схема → а.е.
-      P(m === 2 ? 1 / SIZE_X : 1, true);                                  // камни пояса: ×500 в «расстояниях», 1 : 1 в истинном
+      P(m ? ROCK_TRUE : 1, true);                                        // камни пояса: 1 : 1 в истинном (меньше пикселя — скрыты)
       P(m ? bodies[PLANET_COUNT - 1].data.au * U_AU / bodies[PLANET_COUNT - 1].data.distance : 1, true); // пыль ~ охвату системы
       P(m ? 1 : 0, false);                                                // маркеры, лупа, звезда-Солнце
       return v;
@@ -2230,7 +2622,7 @@
 
     // --- переключение режима и покадровая интерполяция
     function setScaleMode(m, instant) {
-      m = ((m % 3) + 3) % 3;
+      m = ((Math.round(m) % SCALE_N) + SCALE_N) % SCALE_N;
       if (m === scl.mode) return;
       scl.from = scl.cur.slice(); scl.to = layoutVec(m); scl.mode = m; scl.t = 0;
       if (instant) updateScale(1e6);
@@ -2266,7 +2658,7 @@
       });
       initLoupe(); scaleUI();
       const q = (new URLSearchParams(location.search).get('scale') || '').toLowerCase();
-      const m = { 1: 1, au: 1, distance: 1, distances: 1, 2: 2, true: 2, real: 2, full: 2 }[q];
+      const m = { 1: 1, au: 1, distance: 1, distances: 1, 2: 1, true: 1, real: 1, full: 1 }[q];   // этап 6: прежние «реальные расстояния» → 1 : 1
       if (m) setScaleMode(m, true);
     }
 
@@ -2283,7 +2675,7 @@
     function updateSunGlow() {
       const th = Math.tan(camera.fov * DEG / 2), rpx = BODIES[0].radius * sunS / (Math.max(camera.position.length(), 1e-9) * th) * innerHeight / 2;
       const a = markK * (1 - sstep(1.5, 7, rpx));
-      sunGlow.visible = a > 0.01;
+      sunGlow.visible = a > 0.01; sunGlowA = sunGlow.visible ? a : 0;
       if (sunGlow.visible) { sunGlow.material.opacity = a; const s = (isMobile ? 26 : 34) / innerHeight * 2 * th; sunGlow.scale.set(s, s, 1); }
     }
 
@@ -2349,19 +2741,12 @@
     const loupeEl = $('loupe'), loupeName = $('loupeName'), loupeMag = $('loupeMag');
     loupeEl.style.setProperty('--ls', LOUPE_PX + 'px');
     const loupeCam = new THREE.PerspectiveCamera(10, 1, 0.001, 6000);
-    let loupeRT = null, loupeScene = null, loupeQuadCam = null, loupeOn = false, loupeKey = '';
-    const LOUPE_FS = `
+    let loupeRT = null, loupeMat = null, loupeScene = null, loupeQuadCam = null, loupeOn = false, loupeKey = '';
+    const LOUPE_FS = ACES_GLSL + `
       uniform sampler2D tDiffuse; varying vec2 vUv;
-      vec3 rrtFit(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
-      vec3 acesFilm(vec3 c){
-        const mat3 inM = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
-        const mat3 outM = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
-        c = inM * c; c = rrtFit(c); c = outM * c; return clamp(c, 0.0, 1.0);
-      }
-      vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
       void main(){
         float r = length(vUv - 0.5); if (r > 0.5) discard;
-        vec3 col = toSRGB(acesFilm(texture2D(tDiffuse, vUv).rgb / 0.6));
+        vec3 col = toSRGB(acesTonemap(texture2D(tDiffuse, vUv).rgb));   // этап 5: тот же ACES и та же яркость, что в финальном проходе
         gl_FragColor = vec4(col, smoothstep(0.5, 0.485, r));
       }`;
     function initLoupe() {
@@ -2369,7 +2754,7 @@
       const half = renderer.capabilities.isWebGL2 && (hasExt('EXT_color_buffer_float') || hasExt('EXT_color_buffer_half_float'));
       const n = Math.round(LOUPE_PX * PR);
       loupeRT = new THREE.WebGLRenderTarget(n, n, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: half ? THREE.HalfFloatType : THREE.UnsignedByteType });
-      const m = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: loupeRT.texture } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      const m = loupeMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: loupeRT.texture }, uExposure: { value: FX_EXPOSURE } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
         fragmentShader: LOUPE_FS, transparent: true, depthTest: false, depthWrite: false });
       const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); q.frustumCulled = false;
       loupeScene = new THREE.Scene(); loupeScene.add(q); loupeQuadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -2436,7 +2821,7 @@
       const m = scl.mode;
       $('scaleLabel').textContent = SCALE_SHORT[m];
       scaleBtn.classList.toggle('on', m > 0);
-      scaleBtn.setAttribute('aria-label', 'Масштаб: ' + SCALE_NAMES[m] + ' (R — следующий, Shift+R — предыдущий)');
+      scaleBtn.setAttribute('aria-label', 'Масштаб: ' + SCALE_NAMES[m] + ' (R — переключить)');
       scaleSeg.forEach((b, k) => { b.classList.toggle('on', k === m); b.setAttribute('aria-checked', String(k === m)); });
       $('scaleHudMode').textContent = SCALE_NAMES[m]; $('scaleHudNote').textContent = SCALE_NOTES[m];
       $('scaleLive').textContent = 'Масштаб: ' + SCALE_NAMES[m];
@@ -2500,6 +2885,66 @@
         loupe: loupeOn ? { name: loupeName.textContent, mag: loupeMag.textContent } : null,
         markers: bodies.filter((b) => b.markerA > 0.5).map((b) => b.data.key), sunGlow: sunGlow.visible ? +sunGlow.material.opacity.toFixed(2) : 0,
         button: $('scaleLabel').textContent };
+    }
+
+    // --- этап 6 (отладка): поставить луну на линию Солнце–планета.
+    //     kind = 'shadow' — луна между Солнцем и планетой (тень на диске), 'eclipse' — за планетой (затмение луны).
+    //     Меняется угол планеты на орбите и фаза луны; на паузе положение сохраняется.
+    function saturnProbe(op, k) {
+      const C = saturnBody.holder.position.clone(), Rp = worldR(saturnBody);
+      const n = new THREE.Vector3(0, 1, 0).applyQuaternion(saturnBody.holder.getWorldQuaternion(new THREE.Quaternion()));
+      const sd = C.clone().negate().normalize(), sg = Math.sign(sd.dot(n)) || 1, sp = sd.clone().addScaledVector(n, -sd.dot(n)).normalize();
+      const scr = (X) => { const v = X.clone().project(camera); return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight, z: v.z }; };
+      const ringHit = (A, B) => { const dir = B.clone().sub(A), den = dir.dot(n); if (Math.abs(den) < 1e-12) return false; const t = C.clone().sub(A).dot(n) / den; if (t <= 1e-6 || t >= 0.999) return false; const r = A.clone().addScaledVector(dir, t).sub(C).length() / Rp; return r > 1.24 && r < 2.35; };
+      const place = (dir, kk) => { window.__solar.camPlace(C.clone().addScaledVector(dir.normalize(), Rp * kk).toArray(), C.toArray()); render(0); };
+      // точка на кольце в тени планеты (против Солнца) и контрольная точка сбоку (90°)
+      const ringPt = (fr, side) => C.clone().addScaledVector(side ? sp.clone().cross(n).normalize() : sp.clone().negate(), Rp * fr);
+      // точка на планете в тени кольца: луч от кольца (1,75 R — кольцо B, со стороны Солнца) по направлению от Солнца
+      const planetPt = () => { const P0 = C.clone().addScaledVector(sp, Rp * 1.75), oc = P0.clone().sub(C), d = sd.clone().negate(), b = oc.dot(d), c = oc.lengthSq() - Rp * Rp, h = b * b - c; return h < 0 ? null : P0.addScaledVector(d, -b - Math.sqrt(h)); };
+      if (op === 'ringView') { place(sp.clone().negate().multiplyScalar(0.55).addScaledVector(n, sg * 0.85), k || 6); return { anti: scr(ringPt(1.6)), side: scr(ringPt(1.6, true)), occl: ringHit(camera.position, ringPt(1.6)) }; }
+      if (op === 'planetView') {
+        const X = planetPt(); if (!X) return null;
+        for (const [a, u] of [[30, -0.5], [45, -0.9], [20, -0.3], [60, -1.2], [30, 0.4], [70, 0.2]]) {
+          const ang = a * DEG, side = sp.clone().cross(n).normalize(), dir = sd.clone().multiplyScalar(Math.cos(ang)).addScaledVector(side, Math.sin(ang)).addScaledVector(n, u * sg);
+          place(dir, k || 5); const nrm = X.clone().sub(C).normalize();
+          if (!ringHit(camera.position, X) && nrm.dot(camera.position.clone().sub(X).normalize()) > 0.25) return { x: scr(X).x, y: scr(X).y, cam: [a, u] };
+        }
+        return null;
+      }
+      if (op === 'ringSh') { saturnPatchUniforms.uRingSh.value = k ? 1 : 0; render(0); return k; }
+      if (op === 'planetSh') { saturnRingMat.uniforms.uPlanetSh.value = k ? 1 : 0; render(0); return k; }
+      return { R: Rp, elevDeg: Math.asin(Math.abs(sd.dot(n))) / DEG, sunAng: saturnRingMat.uniforms.uSunAng.value };
+    }
+    function shBody(key) {
+      if (key === 'moon') return { pos: (v) => moon.getWorldPosition(v), r: () => 0.17 * moon.scale.x * earthBody.ss, parent: 'earth' };
+      const b = bodies.find((x) => x.data.key === key);
+      return { pos: (v) => b.getPos(v), r: () => worldR(b), parent: b.parentBody ? b.parentBody.data.key : null };
+    }
+    function alignMoon(key, kind) {
+      const isEarth = key === 'moon', b = isEarth ? null : bodies.find((x) => x.data.key === key);
+      if (!isEarth && !(b && b.parentBody)) return null;
+      const P = isEarth ? earthBody : b.parentBody, obj = isEarth ? moon : b.mesh;
+      const setTh = (t) => { if (isEarth) moonPivot.rotation.y = t; else { const r = moonRadius(b.data, t) * b.ak; b.theta = t; b.mesh.position.set(Math.cos(t) * r, 0, -Math.sin(t) * r); } };
+      const off = (t, out) => { setTh(t); obj.updateWorldMatrix(true, false); return obj.getWorldPosition(out).sub(P.holder.position); };
+      const sgn = kind === 'eclipse' ? 1 : -1, o = new THREE.Vector3(), dir = new THREE.Vector3();
+      const N = 720, offs = [];
+      for (let i = 0; i < N; i++) offs.push(off(i / N * TAU, new THREE.Vector3()).normalize());
+      let best = -2, ba = 0, bt = 0;
+      const evalA = (a) => { dir.set(Math.cos(a), 0, -Math.sin(a)).multiplyScalar(sgn); for (let i = 0; i < N; i++) { const d = offs[i].dot(dir); if (d > best) { best = d; ba = a; bt = i / N * TAU; } } };
+      for (let k = 0; k < 720; k++) evalA(k / 720 * TAU);
+      // уточнение: координатный спуск по фазе луны и углу планеты
+      let stA = TAU / 720, stT = TAU / N;
+      for (let it = 0; it < 40; it++) {
+        let imp = false;
+        for (const [da, dt] of [[stA, 0], [-stA, 0], [0, stT], [0, -stT]]) {
+          const a = ba + da, t = bt + dt; dir.set(Math.cos(a), 0, -Math.sin(a)).multiplyScalar(sgn);
+          const d = off(t, o).normalize().dot(dir); if (d > best) { best = d; ba = a; bt = t; imp = true; }
+        }
+        if (!imp) { stA /= 2; stT /= 2; }
+      }
+      P.angle = ba; P.holder.position.set(Math.cos(ba) * P.sd, 0, -Math.sin(ba) * P.sd); setTh(bt);
+      render(0);
+      return { key, kind, planetAngle: ba, theta: bt, sepDeg: Math.acos(Math.min(1, best)) / DEG };
     }
 
     /* ================================================================
@@ -2603,7 +3048,7 @@
       updateCamera(dt);
       sky.position.copy(camera.position); starField.position.copy(camera.position);
       coronaMesh.quaternion.copy(camera.quaternion);
-      updateNear(); updateSunGlow();
+      updateNear(); updateSunGlow(); updateFx(dt); updateShadows();
       updateLabels();
 
       if (composer) { finalPass.uniforms.uTime.value = time; composer.render(dt); }
@@ -2612,14 +3057,58 @@
     }
 
     const clock = new THREE.Clock();
-    function loop() { requestAnimationFrame(loop); const dt = Math.min(clock.getDelta(), 0.05); if (window.__solar.ready) render(dt); }
+    let lastFrameAt = 0;
+    function loop() {
+      requestAnimationFrame(loop);
+      const now = performance.now(), ms = lastFrameAt ? now - lastFrameAt : 0; lastFrameAt = now;
+      const dt = Math.min(clock.getDelta(), 0.05);
+      if (window.__solar.ready) { render(dt); fxMonitor(fx.simMs != null ? fx.simMs : ms); }
+    }
 
-    Object.assign(window.__solar, { scale: () => scaleDebug(), setScale: (m, instant) => setScaleMode(m, instant), focus: (i) => focusBody(i), reset: resetView, finishFlight: () => { if (fly.active) { fly.t = 1; render(0.016); } }, step: (n, dt) => { for (let i = 0; i < n; i++) render(dt || 0.016); },
+    Object.assign(window.__solar, { scale: () => scaleDebug(), setScale: (m, instant) => setScaleMode(m === 2 ? 1 : m, instant), focus: (i) => focusBody(i), reset: resetView, finishFlight: () => { if (fly.active) { fly.t = 1; render(0.016); } }, step: (n, dt) => { for (let i = 0; i < n; i++) render(dt || 0.016); },
       audio: () => music.debug(),
+      // этап 5: свечение и tone mapping
+      fx: () => ({ mode: fx.mode, fromUrl: fx.fromUrl, available: fx.available, effective: bloomWanted(), active: !!(glowPass && glowPass.enabled), k: +fx.k.toFixed(3),
+        strength: finalPass ? +finalPass.uniforms.uBloom.value.toFixed(3) : 0, reason: fx.mode === 'auto' ? autoReason() : null, software: fx.software, weak: fx.weak, perfOff: fx.perfOff,
+        gpu: fx.gpu, halfFloat: fxHalf, bloomRes: bloomSrc ? [bloomSrc.width, bloomSrc.height] : null, exposure: finalPass ? finalPass.uniforms.uExposure.value : renderer.toneMappingExposure,
+        toneMapping: composer ? 'aces-final-pass' : (renderer.toneMapping === THREE.ACESFilmicToneMapping ? 'aces-renderer' : 'none'),
+        frameMs: +fx.frameMs.toFixed(1), ema: +fx.ema.toFixed(1), slowFor: +fx.slowFor.toFixed(2), state: $('bloomState').textContent,
+        toast: toastEl.classList.contains('on') ? fx.toastText : '', toasts: fx.toastCount, haze: +sunHaze.material.opacity.toFixed(3), stored: (() => { try { return localStorage.getItem(FX_KEY); } catch (e) { return null; } })() }),
+      setBloom: (m) => setBloomMode(m), setExposure,
+      camPlace: (p, t) => { following = null; fly.active = false; zoomGoal = 0;
+        // этап 6: гасим остаточную инерцию OrbitControls (иначе камера «доезжает» после постановки)
+        const dmp = controls.enableDamping; controls.enableDamping = false; controls.update(); controls.enableDamping = dmp;
+        controls.target.fromArray(t || [0, 0, 0]); camera.position.fromArray(p);
+        controls.minDistance = Math.min(controls.minDistance, camera.position.distanceTo(controls.target) * 0.5); render(0.016); },
+      disc: (i) => { const b = bodies[i]; return { x: b.sx, y: b.sy, r: b.rpx, on: b.onScreen }; },
+      bloomParams: (o) => { Object.assign(BLOOM, o || {}); if (bloomPass) { bloomPass.radius = BLOOM.radius; bloomPass.threshold = BLOOM.threshold; bloomPass.compositeMaterial.uniforms.bloomFactors.value = BLOOM.factors.slice(); } return Object.assign({}, BLOOM); },
+      // отладка правила 28 мс / 3 с: fxSim({ hardware: true, frameMs: 40 }) — считать GPU аппаратным и подменить время кадра; fxFeed(ms, n) — n кадров по ms
+      fxSim: (o) => { o = o || {}; if (o.hardware) { fx.software = false; fx.weak = false; } if ('frameMs' in o) fx.simMs = o.frameMs; if (o.resetPerf) fx.perfOff = false; fxUI(); return window.__solar.fx(); },
+      fxFeed: (ms, n) => { for (let i = 0; i < (n || 1); i++) fxMonitor(ms); return window.__solar.fx(); },
       bodies: () => bodies.map((b) => ({ index: b.index, key: b.data.key, parent: b.parentBody ? b.parentBody.data.key : null })),
       state: () => ({ selected, key: selected >= 0 ? bodies[selected].data.key : null, following: following ? following.data.key : null, tour, panel: panel.classList.contains('visible'), flying: fly.active, paused,
         moonOrbits: bodies.filter((b) => b.parentBody).map((b) => ({ key: b.data.key, fade: +b.fade.toFixed(3), visible: b.orbit.visible })) }),
       pos: (i) => bodies[i].getPos(new THREE.Vector3()).toArray(), cam: () => camera.position.toArray(),
+      // этап 6: тени — состояние, переключение и постановка луны на линию Солнце–планета
+      shadows: () => ({ on: sh.on, fromUrl: sh.fromUrl, uniform: shadowOn.value, receivers: shadowRecv.map((r) => r.mesh === moon ? 'moon' : (bodies.find((b) => b.mesh === r.mesh || b.clouds === r.mesh) || {}).data.key + (r.mesh.material.alphaMap ? ':clouds' : '')),
+        ui: shadowSeg.filter((b) => b.classList.contains('on')).map((b) => b.dataset.shadows), stored: (() => { try { return localStorage.getItem(FX_KEY); } catch (e) { return null; } })(),
+        titanSun: titanHaze ? +titanHaze[0].uniforms.uSun.value.toFixed(3) : null }),
+      setShadows: (on) => { setShadows(on); render(0); return window.__solar.shadows(); },
+      align: (key, kind) => alignMoon(key, kind || 'shadow'),
+      // отладка теней Сатурна ↔ кольца: геометрия, камера, точки на экране, выключатели (только для тестов)
+      saturnProbe: (op, k) => saturnProbe(op, k),
+      // камера у тела key ('moon' — Луна): на расстоянии k радиусов, повёрнута на ang° от направления на Солнце, up — подъём
+      camAt: (key, k, ang, up) => { const t = shBody(key), P = t.pos(new THREE.Vector3()), r = t.r(), L = P.length() || 1, a = (ang || 0) * DEG;
+        const dx = -P.x / L, dz = -P.z / L, ox = dx * Math.cos(a) - dz * Math.sin(a), oz = dx * Math.sin(a) + dz * Math.cos(a), d = r * k;
+        window.__solar.camPlace([P.x + ox * d, P.y + d * (up || 0), P.z + oz * d], P.toArray()); render(0); return window.__solar.px(key); },
+      px: (key) => { const t = shBody(key), P = t.pos(new THREE.Vector3()), d = camera.position.distanceTo(P), v = P.clone().project(camera);
+        return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight, r: t.r() / (d * Math.tan(camera.fov * DEG / 2)) * innerHeight / 2 }; },
+      // центр тени луны на диске планеты (луч Солнце → центр луны) в экранных координатах
+      spot: (key) => { const t = shBody(key), M = t.pos(new THREE.Vector3()), par = shBody(t.parent), C = par.pos(new THREE.Vector3()), R = par.r();
+        const dir = M.clone().normalize(), oc = M.clone().sub(C), b = oc.dot(dir), c = oc.lengthSq() - R * R, h = b * b - c; if (h < 0) return null;
+        const X = M.clone().addScaledVector(dir, -b - Math.sqrt(h)), v = X.clone().project(camera), d = camera.position.distanceTo(X);
+        return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight, r: t.r() / (d * Math.tan(camera.fov * DEG / 2)) * innerHeight / 2 }; },
+      sunVis: (key) => { const b = key === 'moon' ? null : bodies.find((x) => x.data.key === key); const rc = shadowRecv.find((r) => r.mesh === (b ? b.mesh : moon)); const P = (b ? b.getPos(new THREE.Vector3()) : moon.getWorldPosition(new THREE.Vector3())); return sunVisJS(P, rc.occ, rc.U.uSunAng.value); },
       screen: (i) => { const v = bodies[i].getPos(new THREE.Vector3()).project(camera); return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight, z: v.z }; } });
 
     build().then(loop).catch((e) => { console.error(e); fail('Ошибка инициализации: ' + e.message); });
