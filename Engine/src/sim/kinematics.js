@@ -12,7 +12,7 @@ import { DEG, CRANK_Y, CRANK_R, ROD_L } from '../config/engine-spec.js';
 /**
  * Высота оси поршневого пальца для фазы цилиндра.
  * @param {number} phiDeg φ — фаза цилиндра, ГРАДУСЫ (0 — ВМТ), любое число.
- * @returns {number} координата Y оси пальца в сцене, u (1 u ≈ 100 мм), от PIN_BDC до PIN_TDC.
+ * @returns {number} координата Y оси пальца в сцене, u (1 u = 100 мм, соглашение модели), от PIN_BDC до PIN_TDC.
  * Источник: Engine.html:1380–1383.
  */
 export function pistonPinY(phiDeg) {
