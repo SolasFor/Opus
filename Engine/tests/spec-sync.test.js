@@ -50,6 +50,15 @@ function functionSource(name) {
   assert.fail(`конец функции ${name}`);
 }
 
+// Текст объявления «const name = {» с начала строки — до первой строки «};».
+function constBlockSource(name) {
+  const start = LINES.flatMap((line, i) => (line.startsWith(`const ${name} = {`) ? [i] : []));
+  assert.equal(start.length, 1, `объявлений const ${name} в Engine.html: ${start.length}, ожидается 1`);
+  const end = LINES.indexOf('};', start[0]);
+  assert.ok(end > start[0], `конец объявления ${name}`);
+  return LINES.slice(start[0], end + 1).join('\n');
+}
+
 // Значения констант Engine.html: строки объявлений исполняются в порядке файла.
 function htmlConstants(names) {
   const idx = [...new Set(names.map(declarationIndex))].sort((a, b) => a - b);
@@ -136,4 +145,67 @@ test('показания: в Engine.html нет множителей хода 86
   assert.doesNotMatch(src, /\*\s*86\b/);
   assert.doesNotMatch(src, /\*\s*9\.6\b/);
   assert.ok(!LINES.some(l => l.includes('Давление в ресивере')), '«Давление в ресивере»');
+});
+
+// ---------- D-05: карточки деталей (NODE_INFO и шаблон openInfo) ----------
+
+const NODE_INFO = new Function(`'use strict';\n${constBlockSource('NODE_INFO')}\nreturn NODE_INFO;`)();
+const cardValue = (key, label) => { const r = NODE_INFO[key].specs.find(([k]) => k === label); assert.ok(r, `${key}: «${label}»`); return r[1]; };
+const comma = x => String(Math.round(x * 10) / 10).replace('.', ',');   // 9.2 → «9,2», 23.000000000000004 → «23»
+const FOOTNOTE = '* иллюстративное значение';
+const DISCLAIMER = 'Учебная модель: справочные значения иллюстративные';
+
+// Строки карточки так, как их выводит openInfo из Engine.html (DOM заменён заглушками).
+function renderSpecs(info) {
+  const out = [];
+  const el = { infoTag: {}, infoTitle: {}, infoDesc: {}, btnIsolate: {}, infocard: { classList: { add() {} } },
+    infoSpecs: { set textContent(v) { out.length = 0; }, insertAdjacentHTML: (pos, h) => { assert.equal(pos, 'beforeend'); out.push(h); } } };
+  const env = { el, ui: { isolated: null }, updateLive() {}, layoutPanels() {} };
+  const names = Object.keys(env);
+  new Function(...names, `'use strict';\n${functionSource('openInfo')}\nreturn openInfo;`)(...names.map(k => env[k]))({ userData: { info } });
+  return out.map(h => {
+    const m = h.match(/^<div class="spec"><span>(.*?)<\/span>(?:<b>(.*?)<\/b>)?<\/div>$/);
+    assert.ok(m, `строка карточки: ${h}`);
+    return m[2] === undefined ? [m[1]] : [m[1], m[2]];
+  });
+}
+
+test('карточки: размеры спецификации A выводятся из констант', () => {
+  const { U_MM, BORE_R, CRANK_R, ROD_L, PIN_TOP, CAM_LIFT, CR, DISPLACEMENT_CM3 } = spec;
+  assert.equal(cardValue('block', 'Диаметр × ход'), `${comma(2 * BORE_R * U_MM)} × ${comma(2 * CRANK_R * U_MM)} мм`);
+  assert.equal(cardValue('block', 'Диаметр × ход'), '85 × 72 мм');
+  assert.equal(cardValue('block', 'Рабочий объём'), `${Math.round(DISPLACEMENT_CM3)} см³`);
+  assert.equal(cardValue('block', 'Рабочий объём'), '1634 см³');
+  assert.equal(cardValue('crankshaft', 'Радиус кривошипа'), `${comma(CRANK_R * U_MM)} мм (½ хода)`);
+  assert.equal(cardValue('rods', 'Межцентровое расстояние'), `${comma(ROD_L * U_MM)} мм`);
+  assert.equal(cardValue('pistons', 'Компрессионная высота'), `${comma(PIN_TOP * U_MM)} мм`);
+  assert.equal(cardValue('pistons', 'Степень сжатия'), `${comma(CR)} : 1`);
+  assert.equal(cardValue('valvetrain', 'Подъём клапана'), `${comma(CAM_LIFT * U_MM)} мм`);
+  // константы карточек — те же, что в 3D-сцене Engine.html
+  const h = htmlConstants(['BORE_R', 'CRANK_R', 'ROD_L', 'PIN_TOP', 'CAM_LIFT']);
+  for (const k of Object.keys(h)) assert.equal(h[k], spec[k], k);
+});
+
+test('карточки: иллюстративные значения помечены «*», в каждой карточке — общая оговорка', () => {
+  const starred = Object.entries(NODE_INFO).flatMap(([key, info]) => info.specs.filter(([, v]) => v.includes('*')).map(([k, v]) => [key, k, v]));
+  assert.deepEqual(starred, [
+    ['crankshaft', 'Момент инерции маховика', '0,12 кг·м²*'],
+    ['rods', 'Нижняя головка', 'Ø 53 мм*, вкладыши'],
+    ['rods', 'Масса', '480 г*'],
+    ['pistons', 'Макс. скорость поршня', '18 м/с*'],
+  ]);
+  for (const [key, info] of Object.entries(NODE_INFO)) {
+    const rows = renderSpecs(info);
+    const hasStar = info.specs.some(([, v]) => v.includes('*'));
+    assert.deepEqual(rows.slice(0, info.specs.length), info.specs.map(([k, v]) => [k, v]), `${key}: строки параметров`);
+    assert.deepEqual(rows.slice(info.specs.length), hasStar ? [[FOOTNOTE], [DISCLAIMER]] : [[DISCLAIMER]], `${key}: примечания`);
+  }
+});
+
+test('в Engine.html нет значений спецификации B', () => {
+  const text = LINES.join('\n');
+  for (const b of ['86 × 86', '1998', '43 мм', '144 мм', '30 мм', '9,6 мм', '499.6', 'Давление в ресивере', '0,93 бар'])
+    assert.ok(!text.includes(b), `«${b}» в Engine.html`);
+  assert.doesNotMatch(text, /[*×]\s*86\b/);
+  assert.doesNotMatch(text, /\*\s*9\.6\b/);
 });
