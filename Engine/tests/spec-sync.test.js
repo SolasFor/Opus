@@ -19,6 +19,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as spec from '../src/config/engine-spec.js';
+import { cycleDeg, cylinderPhaseDeg, strokeOf } from '../src/sim/cycle.js';
+import { PIN_TDC, PIN_BDC } from '../src/sim/kinematics.js';
+import { volumeAt, pressureAt } from '../src/sim/thermo.js';
 
 const LINES = readFileSync(new URL('../Engine.html', import.meta.url), 'utf8').split('\n');
 const DEG2RAD = Math.PI / 180;
@@ -31,6 +34,20 @@ function declarationIndex(name) {
   LINES.forEach((line, i) => { if (re.test(line.replace(/\/\/.*$/, ''))) found.push(i); });
   assert.equal(found.length, 1, `объявлений ${name} в Engine.html: ${found.length}, ожидается 1`);
   return found[0];
+}
+
+// Текст функции Engine.html, объявленной с начала строки: до строки, на которой скобки { } уравновешиваются.
+function functionSource(name) {
+  const re = new RegExp(`^function ${name}\\(`);
+  const found = LINES.flatMap((line, i) => (re.test(line) ? [i] : []));
+  assert.equal(found.length, 1, `объявлений function ${name} в Engine.html: ${found.length}, ожидается 1`);
+  let depth = 0;
+  for (let j = found[0]; j < LINES.length; j++) {
+    const code = LINES[j].replace(/\/\/.*$/, '');
+    for (const ch of code) depth += ch === '{' ? 1 : ch === '}' ? -1 : 0;
+    if (depth === 0 && code.includes('}')) return LINES.slice(found[0], j + 1).join('\n');
+  }
+  assert.fail(`конец функции ${name}`);
 }
 
 // Значения констант Engine.html: строки объявлений исполняются в порядке файла.
@@ -71,4 +88,52 @@ test('ограничение D-05 (решение 7): степень сжати�
   assert.ok(Math.abs(vcFlat - 51.07) < 0.01, `VC плоской камеры ${vcFlat} см³`);
   assert.ok(Math.abs(cr3d - 9.0) < 0.01, `CR по 3D ${cr3d}`);
   assert.ok(cr3d < spec.CR);
+});
+
+// ---------- D-05: показания карточек (liveRows) ----------
+
+// liveRows из Engine.html с заглушками состояния страницы; константы — из Engine.html, формулы модели — модули.
+function makeLiveRows() {
+  const c = htmlConstants(['DEG', 'FIRE_DEG', 'CRANK_R', 'ROD_L', 'CAM_LIFT', 'SPARK_ADV', 'BASE_RPM', 'R_CRANK_SPR', 'IDLER']);
+  const sim = { theta: 0, running: false, pistonY: [0, 0, 0, 0], intakeLift: [0, 0, 0, 0], exhaustLift: [0, 0, 0, 0], heat: 0 };
+  const env = { ...c, sim, ui: { pvCyl: 0 }, effSpeed: () => 1, PIN_TDC, PIN_BDC, volumeAt, pressureAt, strokeOf,
+    mod: (a, n) => ((a % n) + n) % n, cycDeg: () => cycleDeg(sim.theta), phaseOf: i => cylinderPhaseDeg(sim.theta, i),
+    STROKES: ['Рабочий ход', 'Выпуск', 'Впуск', 'Сжатие'].map(name => ({ name })) };
+  const names = Object.keys(env);
+  const liveRows = new Function(...names, `'use strict';\n${functionSource('liveRows')}\nreturn liveRows;`)(...names.map(k => env[k]));
+  return { liveRows, sim };
+}
+const row = (rows, label) => { const r = rows.find(([k]) => k === label); assert.ok(r, `строка «${label}»`); return r[1]; };
+
+test('показания: ход поршня 0…72 мм и подъём клапана 0…9,2 мм из 3D-констант', () => {
+  const { liveRows, sim } = makeLiveRows();
+  sim.pistonY[0] = PIN_TDC;
+  assert.equal(row(liveRows('pistons'), 'От ВМТ'), '0.0 мм');
+  sim.pistonY[0] = PIN_BDC;
+  assert.equal(row(liveRows('pistons'), 'От ВМТ'), '72.0 мм');
+  sim.pistonY[0] = (PIN_TDC + PIN_BDC) / 2;
+  assert.equal(row(liveRows('pistons'), 'От ВМТ'), '36.0 мм');
+  sim.intakeLift[0] = 1; sim.exhaustLift[0] = 0.5;   // доли наибольшего подъёма, как в updateKinematics
+  assert.equal(row(liveRows('valvetrain'), 'Впускные, ц. 1'), '9.2 мм');
+  assert.equal(row(liveRows('valvetrain'), 'Выпускные, ц. 1'), '4.6 мм');
+});
+
+test('показания: объём камеры 43…452 см³, давление на впуске 0,92 бар — значение модели', () => {
+  const { liveRows, sim } = makeLiveRows();
+  sim.theta = 0;
+  assert.equal(row(liveRows('head'), 'Объём'), '43 см³');
+  sim.theta = 180 * spec.DEG;
+  assert.equal(row(liveRows('head'), 'Объём'), '452 см³');
+  // 0,92 бар — плато pressureAt на такте впуска (φ 400…500°), формулы давления D-05 не меняет
+  for (let phi = 400; phi <= 500; phi += 0.5) assert.equal(pressureAt(phi), 0.92, `pressureAt(${phi})`);
+  const intake = liveRows('intake');
+  assert.equal(row(intake, 'Давление на впуске (модель)'), pressureAt(450).toFixed(2).replace('.', ',') + ' бар');
+  assert.ok(!intake.some(([k]) => /ресивер/i.test(k)), 'в модели нет ресивера: подпись не должна его упоминать');
+});
+
+test('показания: в Engine.html нет множителей хода 86 мм и подъёма 9,6 мм', () => {
+  const src = functionSource('liveRows');
+  assert.doesNotMatch(src, /\*\s*86\b/);
+  assert.doesNotMatch(src, /\*\s*9\.6\b/);
+  assert.ok(!LINES.some(l => l.includes('Давление в ресивере')), '«Давление в ресивере»');
 });
