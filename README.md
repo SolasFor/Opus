@@ -1,20 +1,20 @@
 # Opus
 
-Три интерактивные 3D-сцены на **Three.js**. Каждая — один самодостаточный HTML-файл: без сборки, без npm, без локальных ассетов. Вся геометрия, текстуры и звук генерируются процедурно прямо в браузере.
+Три интерактивные 3D-сцены на **Three.js** — без сборки, без npm, без локальных ассетов. Аквариум и Солнечная система — по одному самодостаточному HTML-файлу. Двигатель — модульная версия (`Engine/index.html` и ES-модули в `Engine/src/`) и однофайловая `Engine/Engine.html`. Вся геометрия, текстуры и звук генерируются процедурно прямо в браузере.
 
 **▶ Онлайн-демо: <https://solasfor.github.io/Opus/>**
 
 | Демо | Что внутри | Онлайн | Файл |
 |------|-----------|--------|------|
 | 🐠 **Аквариум** | Рифовая сцена: стаи рыб, свет, вода, каустика | [открыть](https://solasfor.github.io/Opus/Akvarium/Aquarium.html) | [`Akvarium/Aquarium.html`](Akvarium/Aquarium.html) |
-| ⚙️ **Двигатель** | Рядная «четвёрка» DOHC 16V: разборка, разрез, рабочий цикл | [открыть](https://solasfor.github.io/Opus/Engine/Engine.html) | [`Engine/Engine.html`](Engin/Engin.html) |
+| ⚙️ **Двигатель** | Рядная «четвёрка» DOHC 16V: разборка, разрез, рабочий цикл | [открыть](https://solasfor.github.io/Opus/Engine/) | [`Engine/index.html`](Engine/index.html), однофайловая — [`Engine/Engine.html`](Engine/Engine.html) |
 | 🪐 **Солнечная система** | Восемь планет на орбитах, карточки с данными и фактами | [открыть](https://solasfor.github.io/Opus/SolarSystem/SolarSystem.html) | [`SolarSystem/SolarSystem.html`](SolarSystem/SolarSystem.html) |
 
 > Интерфейс обеих сцен — на русском языке.
 
 ## Запуск
 
-Откройте любой файл в браузере двойным щелчком или поднимите локальный сервер:
+Аквариум, Солнечную систему и однофайловую версию двигателя (`Engine/Engine.html`) можно открыть в браузере двойным щелчком. Модульной версии двигателя (`Engine/index.html`) нужен веб-сервер, например локальный:
 
 ```bash
 python -m http.server 8000
@@ -23,7 +23,7 @@ python -m http.server 8000
 После этого:
 
 - Аквариум — <http://localhost:8000/Akvarium/Aquarium.html>
-- Двигатель — <http://localhost:8000/Engine/Engine.html>
+- Двигатель — <http://localhost:8000/Engine/> (однофайловая версия — <http://localhost:8000/Engine/Engine.html>)
 - Солнечная система — <http://localhost:8000/SolarSystem/SolarSystem.html>
 
 **Требования:** современный браузер с WebGL и ES-модулями, доступ в интернет. Three.js подгружается с CDN: в Аквариуме и Двигателе — версия 0.160 с аддонами через `importmap` (unpkg), в Солнечной системе — r128 (cdnjs и unpkg).
@@ -145,17 +145,22 @@ Opus/
 ├── Akvarium/
 │   └── Aquarium.html   # аквариум, ~109 КБ
 ├── Engine/
-│   └── Engine.html      # двигатель, ~134 КБ
+│   ├── index.html       # двигатель, модульная версия: разметка и стили
+│   ├── src/             # ES-модули: main.js, config/, sim/
+│   ├── tests/           # тесты модели (node --test)
+│   └── Engine.html      # двигатель, однофайловая версия, ~135 КБ
 ├── SolarSystem/
-│   └── SolarSystem.html  # солнечная система, ~23 КБ
+│   └── SolarSystem.html  # солнечная система, ~242 КБ
 └── README.md
 ```
 
 ## Технические заметки
 
-- Один файл на сцену, весь код внутри HTML.
+- Аквариум и Солнечная система — один файл на сцену, весь код внутри HTML.
+- Двигатель: `Engine/index.html` подключает `Engine/src/main.js`, модель двигателя (спецификация, кинематика, цикл, газораспределение, давление) вынесена в модули `src/config` и `src/sim`. Однофайловая `Engine/Engine.html` сохранена для запуска без сервера.
 - Аквариум и Двигатель: Three.js 0.160, ES-модуль и `importmap` (unpkg).
 - Солнечная система: Three.js r128 и `OrbitControls` обычными `<script>` с CDN.
 - Бандлер нигде не нужен.
+- Тесты модели двигателя: `node --test Engine/tests/*.test.js` (Node 20.19+ или 22.7+, без зависимостей).
 - Геометрия — процедурная (объединённые меши и `InstancedMesh`), текстуры и шейдерные эффекты — в рантайме.
 - Звук синтезируется через WebAudio и по умолчанию выключен.
