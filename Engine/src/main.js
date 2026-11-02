@@ -4,6 +4,8 @@
  * импортируются из ./config и ./sim (их тождество с копиями в Engine.html проверяют spec-sync.test.js
  * и legacy-parity.test.js), cycDeg и phaseOf — обёртки над cycleDeg и cylinderPhaseDeg с аргументом sim.theta.
  * С X-01 Engine.html заморожен (D-17): изменения вносятся только сюда, заморозку проверяет tests/legacy-freeze.test.js.
+ * M-03: сообщения о сбоях запуска (экран загрузки в index.html), потеря и восстановление WebGL-контекста,
+ * остановка цикла при повторяющейся ошибке кадра, engine.dispose().
  */
 /* ============================================================================
  * ЧЕТЫРЁХТАКТНЫЙ ДВИГАТЕЛЬ — интерактивная 3D-разборка (рядная «четвёрка», DOHC 16V)
@@ -204,9 +206,11 @@ function initScene() {
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   } catch (e) {
-    window.__engFail('Браузер не смог создать WebGL-контекст. Включите аппаратное ускорение в настройках браузера или обновите драйвер видеокарты.');
+    window.__engFail('Браузер не смог создать WebGL-контекст. Включите аппаратное ускорение в настройках браузера или обновите драйвер видеокарты.', ['reload']);
     throw e;
   }
+  canvas.addEventListener('webglcontextlost', onContextLost, { signal: life.signal });   // M-03; обработчики three.js стоят раньше
+  canvas.addEventListener('webglcontextrestored', onContextRestored, { signal: life.signal });
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(innerWidth, innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -219,10 +223,7 @@ function initScene() {
   scene = new THREE.Scene();
   scene.background = makeBackground();
   scene.fog = new THREE.FogExp2(0x101318, 0.012);
-
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
-  pmrem.dispose();
+  scene.environment = makeEnvironment();
 
   camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
   camera.position.copy(CAM_HOME);
@@ -265,6 +266,16 @@ function initScene() {
 
   engineRoot = new THREE.Group();
   scene.add(engineRoot);
+}
+
+/* окружение — результат рендера на GPU (PMREM); после потери контекста его нужно построить заново */
+let envRoom = null, envTarget = null;
+function makeEnvironment() {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  envRoom = new RoomEnvironment(renderer);
+  envTarget = pmrem.fromScene(envRoom, 0.04);
+  pmrem.dispose();
+  return envTarget.texture;
 }
 
 function makeBackground() {
@@ -1769,7 +1780,7 @@ function initUI() {
   el.fireChips = Array.from(document.querySelectorAll('.fire .c'));
 
   // buttons never keep focus (so Space never double-triggers a focused button)
-  document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); });
+  document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); }, { signal: life.signal });
 
   el.explodeSlider.addEventListener('input', () => {
     exitStepMode();
@@ -1828,7 +1839,7 @@ function initUI() {
     sim.theta = (base + +el.angleSlider.value) * DEG;
   });
   el.angleSlider.addEventListener('change', endScrub);
-  window.addEventListener('pointerup', endScrub);
+  window.addEventListener('pointerup', endScrub, { signal: life.signal });
   const holdRepeat = (btn, sign) => {
     let t1 = 0, t2 = 0;
     const stop = () => { clearTimeout(t1); clearInterval(t2); };
@@ -1893,8 +1904,8 @@ function initUI() {
   controls.addEventListener('start', () => { if (ui.camTw) { ui.camTw.kill(); ui.camTw = null; } ui.lastInteract = performance.now(); });
   cv.addEventListener('wheel', () => { if (ui.camTw) { ui.camTw.kill(); ui.camTw = null; } ui.lastInteract = performance.now(); }, { passive: true });
 
-  window.addEventListener('keydown', onKey);
-  window.addEventListener('resize', onResize);
+  window.addEventListener('keydown', onKey, { signal: life.signal });
+  window.addEventListener('resize', onResize, { signal: life.signal });
   updateStepUI();
   buildLabels();
   setupCharts();
@@ -2012,8 +2023,65 @@ function frame(dt) {
   adapt();
 }
 function loop() {
-  requestAnimationFrame(loop);
-  frame(Math.min(clock.getDelta(), 0.05));
+  if (run.stopped) return;
+  run.raf = requestAnimationFrame(loop);
+  if (run.lost) return;                     // M-03: пауза, пока WebGL-контекст потерян
+  try {
+    frame(Math.min(clock.getDelta(), 0.05));
+    run.errors = 0;
+  } catch (err) {                           // M-03: ошибку кадра сообщаем один раз; если повторяется — останавливаем цикл
+    if (++run.errors === 1) console.error(err);
+    if (run.errors >= 30) {
+      stopLoop();
+      window.__engScreen('failed', '<b>3D-модель остановлена из-за ошибки.</b><br>' +
+        window.__engEsc(err && err.message ? err.message : err) + '<br>Перезагрузите страницу.', ['reload']);
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * M-03. ПОТЕРЯ WEBGL-КОНТЕКСТА, ОСТАНОВКА, DISPOSE
+ * После restore three.js сам заново загружает геометрии, материалы, canvas-текстуры и карты теней;
+ * окружение (PMREM) — результат рендера, его строим заново.
+ * ------------------------------------------------------------------------- */
+const run = { raf: 0, stopped: false, disposed: false, lost: false, errors: 0, timer: 0 };
+const life = new AbortController();         // снимает слушатели window/document в dispose()
+function stopLoop() { run.stopped = true; cancelAnimationFrame(run.raf); }
+function onContextLost() {
+  if (run.stopped) return;                  // после остановки сообщение об ошибке остаётся на экране
+  run.lost = true;
+  window.__engScreen('lost', 'Графика временно недоступна: браузер сбросил WebGL-контекст. Восстанавливаю…');
+  clearTimeout(run.timer);
+  run.timer = setTimeout(() => window.__engScreen('failed', '<b>Не удалось восстановить графику.</b><br>' +
+    'Браузер не вернул WebGL-контекст. Перезагрузите страницу.', ['reload']), 10000);
+}
+function onContextRestored() {
+  clearTimeout(run.timer);
+  scene.environment = makeEnvironment();
+  run.lost = false;
+  if (window.__engOk && !run.stopped) window.__engScreen('ready');
+}
+function dispose() {
+  if (run.disposed) return;
+  run.disposed = true;
+  stopLoop();
+  clearTimeout(run.timer);
+  life.abort();
+  controls.dispose();
+  const res = new Set([scene.background, envTarget]);
+  [scene, envRoom].forEach(root => root.traverse(o => {
+    if (o.isInstancedMesh) res.add(o);
+    if (o.geometry) res.add(o.geometry);
+    for (const m of [].concat(o.material || [])) {
+      res.add(m);
+      for (const v of Object.values(m).concat(Object.values(m.uniforms || {}).map(u => u.value))) if (v && v.isTexture) res.add(v);
+    }
+    if (o.shadow && o.shadow.map) res.add(o.shadow);
+  }));
+  res.forEach(r => r && r.dispose());
+  if (audio.ctx) audio.ctx.close();
+  renderer.dispose();
+  renderer.forceContextLoss();              // внутренние объекты three.js (фон, материалы теней) уходят вместе с контекстом
 }
 
 /* ----------------------------------------------------------------------------
@@ -2033,9 +2101,7 @@ function boot() {
   controls.update();
   frame(0.016);
   window.__engOk = true;
-  const loader = $('loader');
-  loader.classList.add('hide');
-  setTimeout(() => loader.remove(), 800);
+  if (!run.lost) window.__engScreen('ready');
   tweenCamera(CAM_HOME.clone(), TGT_HOME.clone(), 2.3, 0.1);
   setTimeout(() => toast('Клик по детали — описание · Space — запуск · ? — все клавиши', 5200), 1600);
   loop();
@@ -2045,8 +2111,8 @@ window.engine = {
   sim, ui, nodes, get renderer() { return renderer; }, get camera() { return camera; }, get controls() { return controls; },
   setView, toggleRun, setRunning, gotoStep, cameraPreset, select: k => select(k ? nodes[k] : null), isolate: k => isolate(k ? nodes[k] : null),
   setTheta: d => { sim.theta = d * DEG; }, phaseOf, pressureAt, frame, toggleLabels: () => el.btnLabels.click(),
-  explode: v => animateExplode(v), busy: () => tweens.size + (meanProgress() !== Math.round(meanProgress()) && !ui.stepMode ? 1 : 0), meanProgress, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+  explode: v => animateExplode(v), dispose, busy: () => tweens.size + (meanProgress() !== Math.round(meanProgress()) && !ui.stepMode ? 1 : 0), meanProgress, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
     programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures })
 };
 try { boot(); }
-catch (err) { console.error(err); window.__engFail('Ошибка при сборке сцены: ' + (err && err.message ? err.message : err)); }
+catch (err) { console.error(err); window.__engFail('Ошибка при сборке сцены: ' + window.__engEsc(err && err.message ? err.message : err), ['reload']); }

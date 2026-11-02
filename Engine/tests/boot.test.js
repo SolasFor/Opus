@@ -3,7 +3,7 @@
  * Состояния (data-boot у <html>): booting → ready | failed; slow — мягкое уведомление через 15 с, не ошибка;
  * lost — потерян WebGL-контекст после запуска. Первая причина сбоя побеждает, после ready сбой запуска не объявляется,
  * ошибка загрузки модуля объясняется сразу: file:// — нужен сервер; иначе пробный запрос к CDN отличает CDN от файлов
- * приложения. Плюс статическая проверка разметки. Без сторонних зависимостей.
+ * приложения. Плюс статические проверки разметки и main.js. Без сторонних зависимостей.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
-const INDEX = read('../index.html');
+const INDEX = read('../index.html'), MAIN = read('../src/main.js');
 const scripts = [...INDEX.matchAll(/<script>\n([\s\S]*?)<\/script>/g)].map(m => m[1]);
 const IMPORTMAP = INDEX.match(/<script type="importmap">\n([\s\S]*?)<\/script>/)[1];
 const THREE_URL = JSON.parse(IMPORTMAP).imports.three;
@@ -163,4 +163,14 @@ test('после запуска: lost показывает экран со сп�
 
 test('__engEsc экранирует & < > " \'', () => {
   assert.equal(boot().g.__engEsc(`a&b<c>"d'`), 'a&#38;b&#60;c&#62;&#34;d&#39;');
+});
+
+test('main.js: готовность и сбои идут через экран запуска; слушатели window/document снимаются в dispose()', () => {
+  assert.match(MAIN, /window\.__engOk = true;\n\s+if \(!run\.lost\) window\.__engScreen\('ready'\);/);
+  assert.doesNotMatch(MAIN, /loader\.remove\(\)/);
+  const global = MAIN.split('\n').filter(l => /\b(?:window|document)\.addEventListener\(/.test(l));
+  assert.ok(global.length >= 4, 'слушатели window/document');
+  for (const l of global) assert.match(l, /\{ signal: life\.signal \}\);/, l.trim());
+  for (const ev of ['webglcontextlost', 'webglcontextrestored']) assert.match(MAIN, new RegExp(`canvas\\.addEventListener\\('${ev}', \\w+, \\{ signal: life\\.signal \\}\\)`));
+  assert.match(MAIN, /\bdispose,/, 'engine.dispose');
 });
