@@ -12,7 +12,7 @@ import { mod } from './math.js';
 /**
  * Подъём по профилю кулачка: cos² в пределах ±CAM_HALF от вершины, вне — 0.
  * @param {number} psi ψ — угол от вершины кулачка, РАДИАНЫ распредвала, любое число (период 2π).
- * @returns {number} подъём, u (1 u ≈ 100 мм), от 0 до CAM_LIFT.
+ * @returns {number} подъём, u (1 u = 100 мм, соглашение модели), от 0 до CAM_LIFT.
  * Источник: Engine.html:1098–1103.
  */
 export function camProfileLift(psi) {      // psi = angle from nose (rad) → lift (world units)
