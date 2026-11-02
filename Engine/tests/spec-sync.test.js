@@ -3,7 +3,8 @@
  *
  * До M-01b Engine.html не импортирует модули Engine/src и держит собственные копии констант.
  * Тест читает Engine.html как текст, находит объявления нужных констант (строки, которые начинаются
- * с «const »), вычисляет их в node:vm и сравнивает с engine-spec.js побитно (Object.is).
+ * с «const »), исполняет их через new Function в той же среде, что и модули, и сравнивает
+ * с engine-spec.js побитно (Object.is).
  * THREE.MathUtils.degToRad заменён заглушкой с семантикой three r160: degrees * (Math.PI / 180).
  * Если константа меняется, её меняют одновременно в Engine.html и в engine-spec.js.
  *
@@ -17,7 +18,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import * as spec from '../src/config/engine-spec.js';
 
 const LINES = readFileSync(new URL('../Engine.html', import.meta.url), 'utf8').split('\n');
@@ -33,11 +33,10 @@ function declarationIndex(name) {
   return found[0];
 }
 
-// Значения констант Engine.html: строки объявлений исполняются в node:vm в порядке файла.
+// Значения констант Engine.html: строки объявлений исполняются в порядке файла.
 function htmlConstants(names) {
   const idx = [...new Set(names.map(declarationIndex))].sort((a, b) => a - b);
-  const src = `'use strict';\n${idx.map(i => LINES[i]).join('\n')}\n({ ${names.join(', ')} });`;
-  return vm.runInNewContext(src, { THREE: THREE_STUB });
+  return new Function('THREE', `'use strict';\n${idx.map(i => LINES[i]).join('\n')}\nreturn { ${names.join(', ')} };`)(THREE_STUB);
 }
 
 // Числовые параметры, которые есть и в Engine.html, и в engine-spec.js.

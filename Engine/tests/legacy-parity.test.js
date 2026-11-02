@@ -2,8 +2,8 @@
  * Паритет функций Engine/Engine.html и модулей Engine/src (D-05; закрывает замечание m3 ревью M-01a).
  *
  * До M-01b Engine.html держит собственные копии функций модели. Тест извлекает их из текста страницы
- * (объявления, которые начинаются с начала строки), исполняет в node:vm в том же процессе, что и модули,
- * и сравнивает:
+ * (объявления, которые начинаются с начала строки), исполняет через new Function в той же среде
+ * (тот же объект Math), что и модули, и сравнивает:
  *   1) значения — побитно (Object.is) на детерминированных сетках, случайных и особых входах;
  *   2) текст функций без комментариев и пробельных символов — тождественно. Для cycDeg и phaseOf
  *      изменяемый sim.theta заменяется явным аргументом thetaRad (имена в модулях: cycleDeg, cylinderPhaseDeg).
@@ -22,7 +22,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import { clamp, clamp01, mod, lerp, smooth } from '../src/sim/math.js';
 import { cycleDeg, cylinderPhaseDeg, strokeOf } from '../src/sim/cycle.js';
 import { pistonPinY, PIN_TDC, PIN_BDC } from '../src/sim/kinematics.js';
@@ -70,7 +69,7 @@ const FUNCS = ['camProfileLift', 'valveDownAngle', 'lobeAngle', 'pistonPinY', 'v
 const ranges = [...CONSTS.map(constDecl), ...FUNCS.map(functionDecl)];
 const starts = [...new Set(ranges.map(r => r[0]))].sort((a, b) => a - b);
 const code = starts.map(s => { const [a, b] = ranges.find(r => r[0] === s); return LINES.slice(a, b + 1).join('\n'); }).join('\n');
-const X = vm.runInNewContext(`'use strict';\n${code}\n({ ${[...CONSTS, ...FUNCS].join(', ')} });`, { THREE: THREE_STUB });
+const X = new Function('THREE', `'use strict';\n${code}\nreturn { ${[...CONSTS, ...FUNCS].join(', ')} };`)(THREE_STUB);
 
 // ---------- входные данные: сетки, особые значения, детерминированный генератор ----------
 
