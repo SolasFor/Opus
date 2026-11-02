@@ -1940,7 +1940,7 @@ function updateLive(force) {
 }
 
 /* ---------- p–V model (Otto cycle with Wiebe heat release & blowdown) ---------- */
-const VS = 499.6, VC = VS / 9.5;
+const VS = Math.PI * (BORE_R * 10) * (BORE_R * 10) * (2 * CRANK_R * 10), VC = VS / 9.5;   // см³, D-05 (спецификация A): Ø 85 × 72 мм из 3D-констант, 1 ед. = 10 см; степень сжатия 10,5
 function volumeAt(phi) { return VC + VS * (PIN_TDC - pistonPinY(phi)) / (PIN_TDC - PIN_BDC); }
 function pClosed(pc) {   // pc: −180 … 230 relative to firing TDC
   const V = VC + VS * (PIN_TDC - pistonPinY(pc)) / (PIN_TDC - PIN_BDC);

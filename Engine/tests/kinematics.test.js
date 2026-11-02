@@ -1,13 +1,18 @@
 /**
- * Физические инварианты M-01a для Engine/src (с допусками, без эталонов legacy).
- * Проверяют смысл формул и единицы: ход и крайние положения поршня, степень сжатия, фазы и порядок работы,
- * такты, профиль кулачка, окна клапанов, период и непрерывность давления, неизменяемость параметров.
+ * Физические инварианты Engine/src (с допусками, без эталонов legacy): M-01a и спецификация A (D-05).
+ * Проверяют смысл формул и единицы: размеры спецификации A, ход и крайние положения поршня, степень сжатия,
+ * рабочий объём, фазы и порядок работы, такты, профиль кулачка, окна клапанов, период и непрерывность
+ * давления, неизменяемость параметров.
  *
- * Запуск из корня репозитория: node --test "Engine/tests/*.test.js"
+ * Требования к Node: 20.19+ (линия 20) или 22.7+ (ES-модули без package.json; подробности —
+ * в characterization.test.js). Запуск из корня репозитория:
+ *   Node 22.7+:   node --test "Engine/tests/*.test.js"
+ *   Node 20.19+:  node --test Engine/tests/*.test.js
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEG, FIRE_DEG, CRANK_R, ROD_L, CAM_LIFT, CAM_HALF, IN_MID, EX_MID, VS, VC } from '../src/config/engine-spec.js';
+import * as spec from '../src/config/engine-spec.js';
 import { cycleDeg, cylinderPhaseDeg, strokeOf } from '../src/sim/cycle.js';
 import { pistonPinY, PIN_TDC, PIN_BDC } from '../src/sim/kinematics.js';
 import { camProfileLift, valveDownAngle, lobeAngle } from '../src/sim/valvetrain.js';
@@ -25,6 +30,29 @@ const grid = (from, to, step) => {
   for (let k = 0; from + k * step <= to + 1e-9; k++) r.push(from + k * step);
   return r;
 };
+
+test('спецификация A (D-05): размеры в мм и единицы сцены', () => {
+  const { U_MM, CYLINDERS, BORE_MM, STROKE_MM, ROD_MM, COMPRESSION_HEIGHT_MM, VALVE_LIFT_MM, CR, BORE_R, PIN_TOP } = spec;
+  assert.equal(U_MM, 100, '1 ед. = 100 мм');
+  assert.equal(CYLINDERS, FIRE_DEG.length, 'цилиндров');
+  near(2 * BORE_R * U_MM, 85, EPS, 'D, мм');
+  near(2 * CRANK_R * U_MM, 72, EPS, 'S = 2R, мм');
+  near(ROD_L * U_MM, 125, EPS, 'L, мм');
+  near(PIN_TOP * U_MM, 23, EPS, 'компрессионная высота, мм');
+  near(CAM_LIFT * U_MM, 9.2, EPS, 'подъём клапана, мм');
+  assert.deepEqual([BORE_MM, STROKE_MM, ROD_MM, COMPRESSION_HEIGHT_MM, VALVE_LIFT_MM, CR], [85, 72, 125, 23, 9.2, 10.5]);
+  // λ = R / L — отношение радиуса кривошипа к длине шатуна
+  near(CRANK_R / ROD_L, 0.288, EPS, 'λ');
+});
+
+test('рабочий объём A: VS = π/4 · D² · S, 4 · VS = 1634,256 см³, степень сжатия 10,5', () => {
+  // D и S — в см: 8,5 и 7,2
+  near(VS, Math.PI / 4 * 8.5 * 8.5 * 7.2, 1e-9, 'VS, см³');
+  near(spec.DISPLACEMENT_CM3, 4 * VS, 1e-9, 'рабочий объём, см³');
+  near(4 * VS, 1634.256, 0.001, '4 · VS, см³');
+  near((VS + VC) / VC, spec.CR, EPS, 'степень сжатия');
+  near(VC, 43.0067, 1e-4, 'VC, см³');
+});
 
 test('ход поршня = 2 · CRANK_R; ВМТ и НМТ — крайние положения', () => {
   near(PIN_TDC - PIN_BDC, 2 * CRANK_R, EPS, 'ход, u');

@@ -40,7 +40,8 @@ function htmlConstants(names) {
 }
 
 // Числовые параметры, которые есть и в Engine.html, и в engine-spec.js.
-const SHARED = ['DEG', 'CRANK_Y', 'CRANK_R', 'ROD_L', 'BORE_R', 'VALVE_TILT', 'CAM_LIFT', 'CAM_HALF',
+// D-05: CRANK_R, ROD_L, BORE_R, PIN_TOP, CAM_LIFT в engine-spec.js выводятся из мм, VS и VC — из геометрии A.
+const SHARED = ['DEG', 'CRANK_Y', 'CRANK_R', 'ROD_L', 'BORE_R', 'PIN_TOP', 'VALVE_TILT', 'CAM_LIFT', 'CAM_HALF',
   'IN_MID', 'EX_MID', 'SPARK_ADV', 'VS', 'VC'];
 
 test('заглушка degToRad даёт значения three r160', () => {
@@ -56,4 +57,18 @@ test('константы Engine.html побитно равны engine-spec.js', 
     assert.equal(html[name], spec[name], `${name}: Engine.html ${html[name]}, engine-spec.js ${spec[name]}`);
   }
   assert.deepEqual([...html.FIRE_DEG], [...spec.FIRE_DEG], 'FIRE_DEG');
+});
+
+test('ограничение D-05 (решение 7): степень сжатия 10,5 3D-геометрией не подтверждается', () => {
+  // В ВМТ днище поршня — ось пальца PIN_TDC = CRANK_Y + CRANK_R + ROD_L плюс PIN_TOP; низ ГБЦ — HEAD_BOT.
+  // Зазор 9 мм; плоская камера Ø 85 мм такой высоты дала бы CR ≈ 9,0. Если 3D-геометрия изменится,
+  // описание ограничения в engine-spec.js нужно пересмотреть.
+  const h = htmlConstants(['CRANK_Y', 'CRANK_R', 'ROD_L', 'PIN_TOP', 'HEAD_BOT', 'BORE_R']);
+  const gapMm = (h.HEAD_BOT - (h.CRANK_Y + h.CRANK_R + h.ROD_L + h.PIN_TOP)) * spec.U_MM;
+  assert.ok(Math.abs(gapMm - 9) < 1e-9, `зазор в ВМТ ${gapMm} мм`);
+  const vcFlat = Math.PI * (h.BORE_R * 10) * (h.BORE_R * 10) * (gapMm / 10);   // см³
+  const cr3d = (spec.VS + vcFlat) / vcFlat;
+  assert.ok(Math.abs(vcFlat - 51.07) < 0.01, `VC плоской камеры ${vcFlat} см³`);
+  assert.ok(Math.abs(cr3d - 9.0) < 0.01, `CR по 3D ${cr3d}`);
+  assert.ok(cr3d < spec.CR);
 });
