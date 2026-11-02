@@ -22,13 +22,15 @@
   h2{margin:14px 0 6px;font-size:22px}
   .card p{margin:0;color:var(--muted);line-height:1.5;font-size:14.5px}
   .go{display:inline-block;margin-top:16px;font-size:14px;color:#7cc0ff}
+  .note{margin:22px 0 0;max-width:820px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.5}
+  .note a{color:#7cc0ff;text-decoration:none}
   footer{margin-top:auto;padding-top:48px;color:var(--muted);font-size:13px}
   footer a{color:#7cc0ff;text-decoration:none}
 </style>
 </head>
 <body>
   <h1>Opus</h1>
-  <p class="lead">Три интерактивные 3D-сцены на Three.js. Один HTML-файл на сцену, без сборки, всё генерируется процедурно.</p>
+  <p class="lead">Три интерактивные 3D-сцены на Three.js. Без сборки, всё генерируется процедурно.</p>
   <div class="grid">
     <a class="card" href="Akvarium/Aquarium.html">
       <div class="emoji">🐠</div>
@@ -36,7 +38,7 @@
       <p>Рифовая сцена: стаи рыб, день, закат и ночь, каустика, кормление, вид от лица рыбы.</p>
       <span class="go">Открыть →</span>
     </a>
-    <a class="card" href="Engine/Engine.html">
+    <a class="card" href="Engine/">
       <div class="emoji">⚙️</div>
       <h2>Двигатель</h2>
       <p>Рядная «четвёрка» DOHC 16V: разборка, рентген и разрез, рабочий цикл, p–V диаграмма.</p>
@@ -49,6 +51,7 @@
       <span class="go">Открыть →</span>
     </a>
   </div>
+  <p class="note">У двигателя есть и <a href="Engine/Engine.html">однофайловая версия</a> — она открывается без сервера, двойным щелчком.</p>
   <footer><a href="https://github.com/SolasFor/Opus">Исходный код на GitHub</a></footer>
 </body>
 </html>
