@@ -4,8 +4,25 @@
  *
  * Эталоны получены исполнением исходных функций legacy (Engine.html:424–447, 456–460, 1098–1103,
  * 1115–1119, 1367–1384, 1943–1958) в Node 24.22.1 с three r160; генератор хранится вне репозитория.
- * Числа записаны в кратчайшей точной десятичной форме, сравнение строгое (Object.is), без допусков:
- * любое изменение порядка операций в перенесённых функциях будет обнаружено.
+ * Числа записаны в кратчайшей точной десятичной форме.
+ *
+ * Сравнение комбинированное:
+ *   точно (assert.equal, Object.is) — значения, которые получаются только из +, −, ×, ÷, %, сравнений,
+ *     Math.floor, Math.round, Math.abs, Math.min, Math.max, Math.sqrt. IEEE-754 и ECMAScript задают
+ *     их результат однозначно, он не зависит от движка. Это параметры, фазы и такты, направления
+ *     клапанов, помощники math, ветки pressureAt без pClosed и нулевая ветка camProfileLift.
+ *   до MAX_ULP = 2 ULP (assertUlp) — значения, зависящие от Math.sin, Math.cos, Math.exp, Math.pow:
+ *     ECMAScript разрешает приближённую реализацию этих функций. 2 ULP — эмпирическая граница, а не
+ *     гарантия JavaScript: Chromium и Node песочницы расходились не более чем на 1 ULP
+ *     (pressureAt(20°), Math.exp). Это pistonPinY, PIN_TDC, PIN_BDC, volumeAt, pClosed,
+ *     pressureAt через pClosed и подъём кулачка вне нулевой ветки.
+ * Точный паритет с legacy в одной среде выполнения (функции Engine.html@10c79c8 и модули в одном
+ * процессе, сравнение Object.is) проверяется отдельно, вне репозитория (проверка V3).
+ *
+ * Ограничение: перестановку операций на путях с sin, cos, exp, pow, которая меняет результат
+ * не больше чем на 2 ULP, эти тесты не обнаружат; её обнаруживает V3.
+ * При обновлении Node эталоны автоматически не переснимаются: если тест упал, сначала выяснить
+ * причину расхождения.
  *
  * Запуск из корня репозитория: node --test "Engine/tests/*.test.js"
  */
@@ -17,6 +34,37 @@ import { cycleDeg, cylinderPhaseDeg, strokeOf } from '../src/sim/cycle.js';
 import { pistonPinY, PIN_TDC, PIN_BDC } from '../src/sim/kinematics.js';
 import { camProfileLift, valveDownAngle, lobeAngle } from '../src/sim/valvetrain.js';
 import { volumeAt, pClosed, pressureAt } from '../src/sim/thermo.js';
+
+// Расстояние в ULP: разность порядковых номеров битовых образов IEEE-754 (+0 и −0 — один номер).
+// NaN совпадает только с NaN.
+const MAX_ULP = 2;
+const view = new DataView(new ArrayBuffer(8));
+function ordinal(x) {
+  view.setFloat64(0, x);
+  const bits = view.getBigInt64(0);
+  return bits < 0n ? -(bits & 0x7fffffffffffffffn) : bits;
+}
+function ulpDistance(a, b) {
+  if (Number.isNaN(a) || Number.isNaN(b)) return Number.isNaN(a) && Number.isNaN(b) ? 0 : Infinity;
+  const d = ordinal(a) - ordinal(b);
+  return Number(d < 0n ? -d : d);
+}
+function assertUlp(actual, expected, message) {
+  const d = ulpDistance(actual, expected);
+  assert.ok(d <= MAX_ULP, `${message}: ${actual} вместо ${expected}, ${d} ULP > ${MAX_ULP}`);
+}
+
+test('ulpDistance: опорные значения', () => {
+  assert.equal(ulpDistance(1, 1), 0);
+  assert.equal(ulpDistance(0, -0), 0);
+  assert.equal(ulpDistance(1, 1 + Number.EPSILON), 1);
+  assert.equal(ulpDistance(1 - Number.EPSILON / 2, 1), 1);
+  assert.equal(ulpDistance(5e-324, -5e-324), 2);
+  assert.equal(ulpDistance(-2, -2 - 2 * Number.EPSILON), 1);
+  assert.equal(ulpDistance(NaN, NaN), 0);
+  assert.equal(ulpDistance(NaN, 1), Infinity);
+  assert.equal(ulpDistance(1, 1 + 3 * Number.EPSILON), 3);
+});
 
 // [имя, значение legacy]
 const CONSTANTS = [
@@ -38,8 +86,8 @@ const CONSTANTS = [
 test('параметры совпадают с legacy', () => {
   for (const [name, value] of CONSTANTS) assert.equal(spec[name], value, name);
   assert.deepEqual([...spec.FIRE_DEG], [0, 540, 180, 360]);
-  assert.equal(PIN_TDC, 2.16, 'PIN_TDC');
-  assert.equal(PIN_BDC, 1.44, 'PIN_BDC');
+  assertUlp(PIN_TDC, 2.16, 'PIN_TDC');   // через pistonPinY: cos, sin
+  assertUlp(PIN_BDC, 1.44, 'PIN_BDC');
 });
 
 // [φ, °; давление legacy, бар]: углы validation §5 и дополнительные
@@ -67,6 +115,8 @@ const PRESSURE = [
   [1440.5, 22.289521772278945],
   [-359.25, 1.0962403500000002],
 ];
+// точно: φ, где pressureAt не вызывает pClosed (pc ≥ 235°: плато 1,12 бар и переходы lerp/smooth)
+const PRESSURE_EXACT = new Set([235, 300, 360, 400, 520, -359.25]);
 // validation §5: те же углы, значения с округлением до 0,001 бар
 const VALIDATION = [
   [0, 22.144],
@@ -88,15 +138,19 @@ const VALIDATION = [
 ];
 
 test('pressureAt: контрольные углы', () => {
-  for (const [phi, p] of PRESSURE) assert.equal(pressureAt(phi), p, `φ = ${phi}°`);
+  for (const [phi, p] of PRESSURE) {
+    if (PRESSURE_EXACT.has(phi)) assert.equal(pressureAt(phi), p, `φ = ${phi}°`);
+    else assertUlp(pressureAt(phi), p, `φ = ${phi}°`);
+  }
+  // точно: при ±2 ULP давления запас до границы округления — не меньше 4·10⁹ ULP
   for (const [phi, p] of VALIDATION) assert.equal(Math.round(pressureAt(phi) * 1000) / 1000, p, `validation §5, φ = ${phi}°`);
 });
 
 test('pressureAt: пик на сетке 0,1°', () => {
   let best = -Infinity, bestK = -1;
   for (let k = 0; k <= 7200; k++) { const p = pressureAt(k * 0.1); if (p > best) { best = p; bestK = k; } }
-  assert.equal(best, 27.493791627547665);
-  assert.equal(bestK, 209); // φ ≈ 20.9°
+  assertUlp(best, 27.493791627547665, 'пик');
+  assert.equal(bestK, 209); // φ ≈ 20.9°; точно: второе по величине значение ниже пика на 2,4·10¹⁰ ULP
 });
 
 // [pc, ° от ВМТ рабочего хода; давление legacy, бар]
@@ -112,7 +166,7 @@ const P_CLOSED = [
 ];
 
 test('pClosed', () => {
-  for (const [pc, p] of P_CLOSED) assert.equal(pClosed(pc), p, `pc = ${pc}°`);
+  for (const [pc, p] of P_CLOSED) assertUlp(pClosed(pc), p, `pc = ${pc}°`);
 });
 
 // [φ, °; pistonPinY, u; volumeAt, см³]
@@ -140,8 +194,8 @@ const KINEMATICS = [
 
 test('pistonPinY и volumeAt', () => {
   for (const [phi, y, v] of KINEMATICS) {
-    assert.equal(pistonPinY(phi), y, `pistonPinY(${phi})`);
-    assert.equal(volumeAt(phi), v, `volumeAt(${phi})`);
+    assertUlp(pistonPinY(phi), y, `pistonPinY(${phi})`);
+    assertUlp(volumeAt(phi), v, `volumeAt(${phi})`);
   }
 });
 
@@ -200,7 +254,11 @@ const CAM = [
 ];
 
 test('camProfileLift', () => {
-  for (const [psi, lift] of CAM) assert.equal(camProfileLift(psi), lift, `camProfileLift(${psi})`);
+  for (const [psi, lift] of CAM) {
+    // нулевой подъём — ветка a ≥ CAM_HALF без cos: точно; остальные строки идут через Math.cos
+    if (lift === 0) assert.equal(camProfileLift(psi), lift, `camProfileLift(${psi})`);
+    else assertUlp(camProfileLift(psi), lift, `camProfileLift(${psi})`);
+  }
 });
 
 // [тип; направление, рад] и [тип, цилиндр; β, рад]
