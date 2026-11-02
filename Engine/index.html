@@ -195,11 +195,16 @@
   #loader{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;
     background:radial-gradient(circle at 50% 45%,#171b22,#0b0d11);transition:opacity .6s ease;text-align:center;padding:24px}
   #loader.hide{opacity:0;pointer-events:none}
+  #loader[hidden]{display:none}
   .spinner{width:46px;height:46px;border-radius:50%;border:3px solid rgba(255,255,255,.10);border-top-color:var(--accent);animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   #loaderMsg{font-size:13px;color:#9aa7b8;letter-spacing:.02em;max-width:460px;line-height:1.6}
   #loaderMsg.err{color:#ffb1a6}
   #loaderMsg.err b{color:#fff}
+  #loaderMsg code{font:12px ui-monospace,Menlo,Consolas,monospace;color:#e6edf6}
+  #loaderAct{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  #loaderAct[hidden]{display:none}
+  #loaderAct .btn{flex:none;padding:8px 18px;text-decoration:none}
 
   /* ---------- responsive ---------- */
   @media (max-width:1100px){ #hud{width:300px} #cycle{width:292px} #infocard{width:316px} }
@@ -372,23 +377,67 @@
 
 <div id="loader">
   <div class="spinner"></div>
-  <div id="loaderMsg">Загружаю Three.js с CDN и собираю двигатель…</div>
+  <div id="loaderMsg" aria-live="polite">Загружаю Three.js с CDN и собираю двигатель…</div>
+  <div id="loaderAct" hidden></div>
 </div>
 
 <script>
-  /* shown if the three.js CDN is unreachable, a module fails or WebGL is unavailable */
-  window.__engFail = function (why) {
-    if (window.__engOk || (window.__engFailed && !why)) return;
-    window.__engFailed = true;
-    var msg = document.getElementById('loaderMsg'), sp = document.querySelector('#loader .spinner');
-    if (sp) sp.style.display = 'none';
-    if (msg) { msg.className = 'err'; msg.innerHTML = '<b>Не удалось запустить 3D-модель.</b><br>' +
-      (why || 'Библиотека Three.js не загрузилась с CDN (unpkg.com). Проверьте подключение к интернету и обновите страницу.'); }
-  };
-  window.addEventListener('error', function (e) {
-    if (!window.__engOk && e && e.message) window.__engFail('Ошибка при запуске: ' + e.message);
-  });
-  setTimeout(function () { if (!window.__engOk) window.__engFail(); }, 20000);
+  /* M-03: экран запуска. Состояние — атрибут data-boot у <html>: booting → ready | failed; slow — мягкое уведомление
+     через 15 с (не ошибка); после запуска lost — потерян WebGL-контекст. Классический скрипт: работает, даже когда
+     граф модулей не загрузился. Побеждает первая причина сбоя; после ready сбой запуска не объявляется. */
+  (function () {
+    var LABEL = { retry: 'Повторить', refresh: 'Обновить', reload: 'Перезагрузить' };
+    var CDN = 'Библиотека Three.js не загрузилась с CDN (unpkg.com). Проверьте подключение к интернету и нажмите «Повторить».';
+    var APP = 'Не загрузились файлы приложения, хотя CDN (unpkg.com) доступен. Нажмите «Повторить». Если ошибка не исчезнет, откройте однофайловую версию.';
+    var FILE = 'Эта версия работает только через веб-сервер: файл открыт с диска, и браузер не загружает её модули. ' +
+      'Без сервера откройте однофайловую версию Engine.html или запустите сервер в корне репозитория: <code>python3 -m http.server</code>.';
+    var root = document.documentElement, timer = 0;
+    var esc = window.__engEsc = function (s) {
+      return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+    };
+    var screen = window.__engScreen = function (state, html, acts) {
+      var box = document.getElementById('loader'), msg = document.getElementById('loaderMsg'), act = document.getElementById('loaderAct');
+      root.setAttribute('data-boot', state);
+      clearTimeout(timer);
+      if (state === 'ready') {   // плавно скрыть; элемент остаётся для сообщений после запуска
+        box.classList.add('hide');
+        timer = setTimeout(function () { box.hidden = true; }, 800);
+        return;
+      }
+      box.hidden = false; box.classList.remove('hide');
+      box.querySelector('.spinner').hidden = state === 'failed';
+      msg.className = state === 'failed' ? 'err' : '';
+      msg.innerHTML = html;
+      act.innerHTML = (acts || []).map(function (a) {
+        return a === 'legacy' ? '<a class="btn accent" href="Engine.html">Открыть Engine.html</a>'
+          : '<button class="btn' + (a === 'retry' ? ' accent' : '') + '" type="button" onclick="location.reload()">' + LABEL[a] + '</button>';
+      }).join('');
+      act.hidden = !act.innerHTML;
+    };
+    var fail = window.__engFail = function (why, acts) {
+      if (window.__engOk || window.__engFailed) return;
+      window.__engFailed = true;
+      screen('failed', '<b>Не удалось запустить 3D-модель.</b><br>' + (why || CDN), acts || ['retry']);
+    };
+    /* ошибка загрузки main.js или его импортов приходит сразу (onerror у модуля); что именно не загрузилось, показывает пробный запрос к CDN */
+    window.__engModuleError = function () {
+      if (window.__engOk || window.__engFailed) return;
+      if (location.protocol === 'file:') return fail(FILE, ['legacy']);
+      var url = 'https://unpkg.com/three@0.160.0/build/three.module.js';
+      try { url = JSON.parse(document.querySelector('script[type="importmap"]').textContent).imports.three || url; } catch (e) {}
+      var cdn = function () { fail(CDN, ['retry']); };
+      setTimeout(cdn, 8000);
+      fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }).then(function () { fail(APP, ['retry', 'legacy']); }, cdn);
+    };
+    window.addEventListener('error', function (e) {
+      if (e && e.message) fail('Ошибка при запуске: ' + esc(e.message), ['reload']);
+    });
+    setTimeout(function () {
+      if (!window.__engOk && !window.__engFailed) screen('slow', 'Загрузка идёт дольше обычного… Возможно, соединение медленное или CDN (unpkg.com) ' +
+        'отвечает с задержкой. Можно подождать или обновить страницу.', ['refresh']);
+    }, 15000);
+    root.setAttribute('data-boot', 'booting');
+  })();
 </script>
 <script type="importmap">
 { "imports": {
@@ -396,6 +445,6 @@
   "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
 } }
 </script>
-<script type="module" src="./src/main.js"></script>
+<script type="module" src="./src/main.js" onerror="__engModuleError()"></script>
 </body>
 </html>
