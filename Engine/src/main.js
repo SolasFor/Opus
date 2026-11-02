@@ -1,3 +1,11 @@
+/* Engine — модульная версия (M-01b). Открывается только по HTTP (D-15): GitHub Pages или локальный сервер,
+ * например `python3 -m http.server` в корне репозитория. Legacy Engine/Engine.html по-прежнему работает через file://.
+ * Код перенесён дословно из встроенного модуля Engine/Engine.html. Отличие одно — шов модели: константы и функции
+ * модели импортируются из ./config и ./sim (их тождество с копиями в Engine.html проверяют spec-sync.test.js
+ * и legacy-parity.test.js), cycDeg и phaseOf — обёртки над cycleDeg и cylinderPhaseDeg с аргументом sim.theta.
+ * Остальной код совпадает с Engine.html построчно; это проверяет tests/entry-sync.test.js.
+ * Исправление в одном файле требует того же исправления в другом.
+ */
 /* ============================================================================
  * ЧЕТЫРЁХТАКТНЫЙ ДВИГАТЕЛЬ — интерактивная 3D-разборка (рядная «четвёрка», DOHC 16V)
  * Один файл · Three.js 0.160 (ES-модули с CDN через importmap) · всё процедурно.
@@ -18,34 +26,30 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { DEG, FIRE_DEG, CRANK_Y, CRANK_R, ROD_L, PIN_TOP, BORE_R, VALVE_TILT, CAM_LIFT, SPARK_ADV, VS, VC } from './config/engine-spec.js';
+import { clamp, clamp01, mod, smooth } from './sim/math.js';
+import { cycleDeg, cylinderPhaseDeg, strokeOf } from './sim/cycle.js';
+import { PIN_TDC } from './sim/kinematics.js';
+import { camProfileLift, valveDownAngle, lobeAngle } from './sim/valvetrain.js';
+import { volumeAt, pressureAt } from './sim/thermo.js';
 
 /* ----------------------------------------------------------------------------
  * 1. КОНСТАНТЫ — мировые единицы: 1 ед. = 100 мм (соглашение модели)
  * ------------------------------------------------------------------------- */
 const CYL_X    = [-1.65, -0.55, 0.55, 1.65];   // оси цилиндров вдоль X
-const FIRE_DEG = [0, 540, 180, 360];           // угол коленвала (в цикле 720°), при котором цилиндр в ВМТ такта сжатия → искра
-                                               // ⇒ порядок работы 1-3-4-2; фаза цилиндра φi = θ − FIRE_DEG[i]
-const CRANK_Y  = 0.55, CRANK_R = 0.36, ROD_L = 1.25;
-const PIN_TOP  = 0.23;                         // от оси поршневого пальца до днища поршня
-const BORE_R   = 0.425;
 const BLOCK_Y0 = -0.30, CRANK_TOP = 1.00, DECK_Y = 2.42;
 const GASKET_Y = 2.45, HEAD_BOT = 2.48, HEAD_TOP = 3.42;
-const VALVE_TILT = THREE.MathUtils.degToRad(12);
 const SEAT_Y   = 2.49, SEAT_Z = 0.215;         // центр тарелки клапана (закрыт)
-const TAPPET_TOP = 1.12, CAM_RB = 0.11, CAM_LIFT = 0.092;
+const TAPPET_TOP = 1.12, CAM_RB = 0.11;
 const CAM_AX   = TAPPET_TOP + CAM_RB;          // расстояние от седла до оси распредвала вдоль оси клапана
 const CAM_Y    = SEAT_Y + CAM_AX * Math.cos(VALVE_TILT);
 const CAM_Z    = SEAT_Z + CAM_AX * Math.sin(VALVE_TILT);
-const CAM_HALF = THREE.MathUtils.degToRad(58); // полуширина профиля кулачка (угол распредвала) → 232° по коленвалу
-const IN_MID = 465, EX_MID = 255;              // середина открытия (φ, град): впуск 349→581, выпуск 139→371
-const SPARK_ADV = 10;                          // опережение зажигания, ° до ВМТ
 const BELT_X   = 2.52;                         // плоскость ремня ГРМ
 const R_CRANK_SPR = 0.21, R_CAM_SPR = 0.42;    // 2 : 1
 const IDLER = { z: 0.66, y: 2.05, r: 0.13 };
 const FLOOR_Y  = -2.90;
 const BASE_RPM = 30;                           // ×1 скорости = 30 об/мин (реальное время замедлено, чтобы видеть такты)
 const CAM_HOME = new THREE.Vector3(6.3, 4.3, 8.7), TGT_HOME = new THREE.Vector3(-0.35, 1.55, 0);
-const DEG = Math.PI / 180;
 
 const STROKES = [
   { name: 'Рабочий ход', short: 'Раб. ход', color: '#ff8a3d' },   // φ 0…180
@@ -54,11 +58,6 @@ const STROKES = [
   { name: 'Сжатие',      short: 'Сжатие',   color: '#a78bfa' }    // 540…720
 ];
 
-const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
-const clamp01 = v => clamp(v, 0, 1);
-const mod = (a, n) => ((a % n) + n) % n;
-const lerp = (a, b, t) => a + (b - a) * t;
-const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const $ = id => document.getElementById(id);
 
@@ -696,12 +695,6 @@ function buildHead(g) {
 /* ---------- 6.6 VALVETRAIN: 16 valves (instanced), springs, 2 camshafts with sprockets ---------- */
 let valveMeshes = [], springMeshes = [], camShafts = [];
 const valves = [];   // {cyl, type, seat:Vector3, axis:Vector3, quat, lift}
-function camProfileLift(psi) {      // psi = angle from nose (rad) → lift (world units)
-  const a = Math.abs(mod(psi + Math.PI, Math.PI * 2) - Math.PI);
-  if (a >= CAM_HALF) return 0;
-  const c = Math.cos(a / CAM_HALF * Math.PI / 2);
-  return CAM_LIFT * c * c;
-}
 function camLobeShape() {
   const s = new THREE.Shape();
   for (let k = 0; k <= 72; k++) {
@@ -711,12 +704,6 @@ function camLobeShape() {
     if (k === 0) s.moveTo(u, v); else s.lineTo(u, v);
   }
   return s;
-}
-/* direction angle (rotation.x convention) the lobe nose must point to for max lift on a valve */
-function valveDownAngle(type) { return type === 'intake' ? Math.PI - VALVE_TILT : Math.PI + VALVE_TILT; }
-function lobeAngle(type, cyl) {   // β: lobe nose angle in camshaft space
-  const mid = type === 'intake' ? IN_MID : EX_MID;
-  return valveDownAngle(type) - (FIRE_DEG[cyl] + mid) / 2 * DEG;
 }
 function springGeometry() {
   class Helix extends THREE.Curve {
@@ -973,16 +960,8 @@ const sim = {
 };
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
 const _qI = new THREE.Quaternion(), _up = V3(0, 1, 0), _d = new THREE.Vector3(), _one = V3(1, 1, 1);
-const cycDeg = () => mod(sim.theta / DEG, 720);
-const phaseOf = i => mod(sim.theta / DEG - FIRE_DEG[i], 720);          // 0 = TDC, start of power stroke
-const strokeOf = phi => Math.floor(mod(phi, 720) / 180);                 // 0 power, 1 exhaust, 2 intake, 3 compression
-
-/* exact slider-crank position for a phase (deg) → wrist-pin height */
-function pistonPinY(phiDeg) {
-  const a = phiDeg * DEG, pinY = CRANK_Y + CRANK_R * Math.cos(a), pinZ = CRANK_R * Math.sin(a);
-  return pinY + Math.sqrt(ROD_L * ROD_L - pinZ * pinZ);
-}
-const PIN_TDC = pistonPinY(0), PIN_BDC = pistonPinY(180);
+const cycDeg = () => cycleDeg(sim.theta);
+const phaseOf = i => cylinderPhaseDeg(sim.theta, i);                   // 0 = TDC, start of power stroke
 
 function updateKinematics() {
   const th = sim.theta;
@@ -1540,24 +1519,6 @@ function updateLive(force) {
   liveTimer = now;
   const rows = liveRows(ui.selected.userData.key);
   el.infoLive.innerHTML = rows.length ? '<div class="ttl">Сейчас</div>' + rows.map(([k, v]) => `<div class="spec"><span>${k}</span><b>${v}</b></div>`).join('') : '';
-}
-
-/* ---------- p–V model (Otto cycle with Wiebe heat release & blowdown) ---------- */
-const VS = Math.PI * (BORE_R * 10) * (BORE_R * 10) * (2 * CRANK_R * 10), VC = VS / 9.5;   // см³, D-05 (спецификация A): Ø 85 × 72 мм из 3D-констант, 1 ед. = 10 см; степень сжатия 10,5
-function volumeAt(phi) { return VC + VS * (PIN_TDC - pistonPinY(phi)) / (PIN_TDC - PIN_BDC); }
-function pClosed(pc) {   // pc: −180 … 230 relative to firing TDC
-  const V = VC + VS * (PIN_TDC - pistonPinY(pc)) / (PIN_TDC - PIN_BDC);
-  const t = clamp01((pc + SPARK_ADV) / 62), xb = 1 - Math.exp(-5 * t * t * t);
-  return 0.95 * Math.pow((VC + VS) / V, 1.32) + xb * 47 * Math.pow(VC / V, 1.32);
-}
-function pressureAt(phi) {
-  phi = mod(phi, 720);
-  const pc = phi >= 540 ? phi - 720 : phi;     // −180 … 540
-  if (pc < 139) return pClosed(pc);
-  if (pc < 235) return lerp(pClosed(Math.min(pc, 230)), 1.12, smooth(139, 235, pc));
-  if (pc < 350) return 1.12;
-  if (pc < 400) return lerp(1.12, 0.92, smooth(350, 400, pc));
-  return lerp(0.92, 0.95, smooth(500, 540, pc));
 }
 
 /* ---------- HUD charts (canvas 2D) ---------- */
