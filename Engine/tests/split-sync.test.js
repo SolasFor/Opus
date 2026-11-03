@@ -40,9 +40,13 @@ const MOVED = {
 const WIRING = { 'audio/engine-audio.js': ['let effSpeed;\nconst setSpeedSource = fn => { effSpeed = fn; };\n', ['setSpeedSource']] };
 // M-02b: модуль → [строки main.js@ac34ff3 (как в sed -n), sha256 этих строк]
 const RENDER = {
+  'render/world.js': ['46,69p', 'a4a65094624d5e0a473d89d9fe3633866178adf2a67b575012ed002d0b4df754'],
+  'render/scene.js': ['82,226p', 'eb7662256fc3893fb3bfc67dd365a4e66827141102caf7cb30c7576d7f40b4a9'],
+  'render/materials.js': ['231,310p', '92b68aba9354fc29ff87ad24dff78b3b431815796a282e9552f709bc294d6f42'],
 };
 // M-02b: строки связки сразу после импортов модуля → строка main.js, которая передаёт значения
 const WIRING_B = {
+  'render/scene.js': ['let life, onContextLost, onContextRestored;\nconst setLifecycle = (ctl, lost, restored) => { life = ctl; onContextLost = lost; onContextRestored = restored; };\nconst storePixelRatio = pr => { pixelRatio = pr; };\n', [/^const life = new AbortController\(\);.*\nsetLifecycle\(life, onContextLost, onContextRestored\);/m, /^ +storePixelRatio\(pr\);/m]],
 };
 const cut = (s, a, b) => {
   const i = s.indexOf(a); assert.ok(i >= 0, `нет «${a}»`); assert.equal(s.indexOf(a, i + 1), -1, `«${a}» встречается дважды`);

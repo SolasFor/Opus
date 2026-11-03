@@ -26,8 +26,6 @@
  * 11. Цикл рендера, адаптивное разрешение, запуск
  * ========================================================================== */
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DEG, FIRE_DEG, CRANK_Y, CRANK_R, ROD_L, PIN_TOP, BORE_R, VALVE_TILT, CAM_LIFT, SPARK_ADV, VS, VC } from './config/engine-spec.js';
 import { clamp, clamp01, mod, smooth } from './sim/math.js';
@@ -39,34 +37,13 @@ import { Ease, tweens, tween, tweenTo, updateTweens } from './anim/tween.js';
 import { NODE_INFO } from './config/parts.js';
 import { STEPS } from './config/steps.js';
 import { audio, setSpeedSource } from './audio/engine-audio.js';
+import { CYL_X, BLOCK_Y0, CRANK_TOP, DECK_Y, GASKET_Y, HEAD_BOT, HEAD_TOP, SEAT_Y, SEAT_Z, TAPPET_TOP, CAM_RB, CAM_Y, CAM_Z, BELT_X, R_CRANK_SPR, R_CAM_SPR, IDLER, BASE_RPM, CAM_HOME, TGT_HOME, STROKES, V3, $ } from './render/world.js';
+import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, engineRoot, flashLight, cutPlane, CAP, initScene, envRoom, envTarget, makeEnvironment, setLifecycle, storePixelRatio } from './render/scene.js';
+import { M, createMaterials, makeHousing } from './render/materials.js';
 
 /* ----------------------------------------------------------------------------
- * 1. КОНСТАНТЫ — мировые единицы: 1 ед. = 100 мм (соглашение модели)
+ * 1. КОНСТАНТЫ — мировые единицы: 1 ед. = 100 мм (соглашение модели) → src/render/world.js (M-02b)
  * ------------------------------------------------------------------------- */
-const CYL_X    = [-1.65, -0.55, 0.55, 1.65];   // оси цилиндров вдоль X
-const BLOCK_Y0 = -0.30, CRANK_TOP = 1.00, DECK_Y = 2.42;
-const GASKET_Y = 2.45, HEAD_BOT = 2.48, HEAD_TOP = 3.42;
-const SEAT_Y   = 2.49, SEAT_Z = 0.215;         // центр тарелки клапана (закрыт)
-const TAPPET_TOP = 1.12, CAM_RB = 0.11;
-const CAM_AX   = TAPPET_TOP + CAM_RB;          // расстояние от седла до оси распредвала вдоль оси клапана
-const CAM_Y    = SEAT_Y + CAM_AX * Math.cos(VALVE_TILT);
-const CAM_Z    = SEAT_Z + CAM_AX * Math.sin(VALVE_TILT);
-const BELT_X   = 2.52;                         // плоскость ремня ГРМ
-const R_CRANK_SPR = 0.21, R_CAM_SPR = 0.42;    // 2 : 1
-const IDLER = { z: 0.66, y: 2.05, r: 0.13 };
-const FLOOR_Y  = -2.90;
-const BASE_RPM = 30;                           // ×1 скорости = 30 об/мин (реальное время замедлено, чтобы видеть такты)
-const CAM_HOME = new THREE.Vector3(6.3, 4.3, 8.7), TGT_HOME = new THREE.Vector3(-0.35, 1.55, 0);
-
-const STROKES = [
-  { name: 'Рабочий ход', short: 'Раб. ход', color: '#ff8a3d' },   // φ 0…180
-  { name: 'Выпуск',      short: 'Выпуск',   color: '#9aa3ad' },   // 180…360
-  { name: 'Впуск',       short: 'Впуск',    color: '#4da3ff' },   // 360…540
-  { name: 'Сжатие',      short: 'Сжатие',   color: '#a78bfa' }    // 540…720
-];
-
-const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-const $ = id => document.getElementById(id);
 
 /* ----------------------------------------------------------------------------
  * 2. МИНИ-TWEEN (замена GSAP) → src/anim/tween.js (M-02a)
@@ -77,237 +54,12 @@ const $ = id => document.getElementById(id);
  * ------------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------------
- * 4. СЦЕНА, СВЕТ, ОКРУЖЕНИЕ
+ * 4. СЦЕНА, СВЕТ, ОКРУЖЕНИЕ → src/render/scene.js (M-02b)
  * ------------------------------------------------------------------------- */
-const params = new URLSearchParams(location.search);
-const MAX_PR = Math.min(window.devicePixelRatio || 1, 1.75);
-let pixelRatio = MAX_PR;
-let renderer, scene, camera, controls, clock, engineRoot, keyLight, flashLight;
-const cutPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 100);   // keeps z < constant
-const CAP = { uCapOn: { value: 0 }, uCapColor: { value: new THREE.Color(0xa9452f) } };
-
-function initScene() {
-  const canvas = $('scene');
-  try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  } catch (e) {
-    window.__engFail('Браузер не смог создать WebGL-контекст. Включите аппаратное ускорение в настройках браузера или обновите драйвер видеокарты.', ['reload']);
-    throw e;
-  }
-  canvas.addEventListener('webglcontextlost', onContextLost, { signal: life.signal });   // M-03; обработчики three.js стоят раньше
-  canvas.addEventListener('webglcontextrestored', onContextRestored, { signal: life.signal });
-  renderer.setPixelRatio(pixelRatio);
-  renderer.setSize(innerWidth, innerHeight);
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.localClippingEnabled = true;
-
-  scene = new THREE.Scene();
-  scene.background = makeBackground();
-  scene.fog = new THREE.FogExp2(0x101318, 0.012);
-  scene.environment = makeEnvironment();
-
-  camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
-  camera.position.copy(CAM_HOME);
-  controls = new OrbitControls(camera, canvas);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.075;
-  controls.minDistance = 2.0;
-  controls.maxDistance = 60;
-  controls.maxPolarAngle = Math.PI * 0.93;
-  controls.autoRotateSpeed = 0.7;
-  controls.target.copy(TGT_HOME);
-  controls.update();
-
-  clock = new THREE.Clock();
-
-  // light: soft sky/ground + warm key with shadows + cool fill + cyan rim
-  scene.add(new THREE.HemisphereLight(0xa9bcd6, 0x1b1712, 0.55));
-  keyLight = new THREE.DirectionalLight(0xfff1e0, 2.3);
-  keyLight.position.set(7, 12, 7.5);
-  keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(2048, 2048);
-  const sc = keyLight.shadow.camera;
-  sc.near = 2; sc.far = 40; sc.left = -9; sc.right = 9; sc.top = 11; sc.bottom = -8;
-  keyLight.shadow.bias = -0.0005;
-  keyLight.shadow.normalBias = 0.03;
-  keyLight.shadow.radius = 3;
-  keyLight.target.position.set(0, 1.5, 0);
-  scene.add(keyLight, keyLight.target);
-  const fill = new THREE.DirectionalLight(0x9cbcff, 0.55);
-  fill.position.set(-9, 4, 6);
-  const rim = new THREE.DirectionalLight(0x7fdcff, 1.25);
-  rim.position.set(-5, 7, -10);
-  scene.add(fill, rim);
-  // single moving combustion light (always present → no shader recompiles)
-  flashLight = new THREE.PointLight(0xff9a4a, 0, 3.2, 2);
-  flashLight.position.set(0, 2.3, 0);
-  scene.add(flashLight);
-
-  buildFloor();
-
-  engineRoot = new THREE.Group();
-  scene.add(engineRoot);
-}
-
-/* окружение — результат рендера на GPU (PMREM); после потери контекста его нужно построить заново */
-let envRoom = null, envTarget = null;
-function makeEnvironment() {
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  envRoom = new RoomEnvironment(renderer);
-  envTarget = pmrem.fromScene(envRoom, 0.04);
-  pmrem.dispose();
-  return envTarget.texture;
-}
-
-function makeBackground() {
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 512;
-  const g = c.getContext('2d');
-  const grd = g.createLinearGradient(0, 0, 0, 512);
-  grd.addColorStop(0, '#1b2029');
-  grd.addColorStop(0.55, '#13161c');
-  grd.addColorStop(1, '#0a0b0e');
-  g.fillStyle = grd; g.fillRect(0, 0, 16, 512);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-function buildFloor() {
-  // procedural floor: fine grid + radial fade baked into a canvas (one texture, one draw call)
-  const N = 1024, c = document.createElement('canvas');
-  c.width = c.height = N;
-  const g = c.getContext('2d');
-  g.fillStyle = '#0f1216'; g.fillRect(0, 0, N, N);
-  const cells = 48;
-  for (let i = 0; i <= cells; i++) {
-    const p = Math.round(i / cells * N) + 0.5;
-    g.strokeStyle = i % 4 === 0 ? 'rgba(120,150,190,0.22)' : 'rgba(120,150,190,0.08)';
-    g.lineWidth = i % 4 === 0 ? 1.4 : 1;
-    g.beginPath(); g.moveTo(p, 0); g.lineTo(p, N); g.stroke();
-    g.beginPath(); g.moveTo(0, p); g.lineTo(N, p); g.stroke();
-  }
-  const map = new THREE.CanvasTexture(c);
-  map.colorSpace = THREE.SRGBColorSpace;
-  map.anisotropy = 4;
-  const a = document.createElement('canvas');
-  a.width = a.height = 256;
-  const ga = a.getContext('2d');
-  const rg = ga.createRadialGradient(128, 128, 10, 128, 128, 128);
-  rg.addColorStop(0, '#fff'); rg.addColorStop(0.45, '#bbb'); rg.addColorStop(1, '#000');
-  ga.fillStyle = rg; ga.fillRect(0, 0, 256, 256);
-  const alpha = new THREE.CanvasTexture(a);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 44),
-    new THREE.MeshStandardMaterial({ map, alphaMap: alpha, transparent: true, depthWrite: false,
-      roughness: 0.62, metalness: 0.0, envMapIntensity: 0.35, color: 0xffffff }));
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = FLOOR_Y;
-  floor.receiveShadow = true;
-  floor.renderOrder = -2;
-  scene.add(floor);
-
-  // soft contact-shadow blob (ambient occlusion feel under the engine)
-  const b = document.createElement('canvas');
-  b.width = b.height = 128;
-  const gb = b.getContext('2d');
-  const rb = gb.createRadialGradient(64, 64, 4, 64, 64, 63);
-  rb.addColorStop(0, 'rgba(0,0,0,0.55)'); rb.addColorStop(0.6, 'rgba(0,0,0,0.22)'); rb.addColorStop(1, 'rgba(0,0,0,0)');
-  gb.fillStyle = rb; gb.fillRect(0, 0, 128, 128);
-  const blob = new THREE.Mesh(new THREE.PlaneGeometry(11, 7),
-    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(b), transparent: true, depthWrite: false }));
-  blob.rotation.x = -Math.PI / 2;
-  blob.position.y = FLOOR_Y + 0.01;
-  blob.renderOrder = -1;
-  scene.add(blob);
-}
 
 /* ----------------------------------------------------------------------------
- * 5. МАТЕРИАЛЫ
+ * 5. МАТЕРИАЛЫ → src/render/materials.js (M-02b)
  * ------------------------------------------------------------------------- */
-let M;
-function stripeTexture(draw, w = 256, h = 16) {
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-function createMaterials() {
-  const std = o => new THREE.MeshStandardMaterial(o);
-  // exhaust heat tint along the runner (u = 0 at the port): straw → bronze → blue → steel
-  const heatTint = stripeTexture((g, w, h) => {
-    const gr = g.createLinearGradient(0, 0, w, 0);
-    gr.addColorStop(0, '#b98d5a'); gr.addColorStop(0.18, '#a9764c'); gr.addColorStop(0.34, '#6e5a86');
-    gr.addColorStop(0.5, '#5b6f92'); gr.addColorStop(0.75, '#8c939b'); gr.addColorStop(1, '#9aa0a6');
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-  });
-  const heatGlow = stripeTexture((g, w, h) => {      // emissive map: glows near the port first
-    const gr = g.createLinearGradient(0, 0, w, 0);
-    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.45, '#9a9a9a'); gr.addColorStop(1, '#2a2a2a');
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-  });
-  // timing belt: tooth stripes along u
-  const beltTex = stripeTexture((g, w, h) => {
-    g.fillStyle = '#17191c'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#2a2e33'; g.fillRect(0, 0, w * 0.5, h);
-    g.fillStyle = 'rgba(255,255,255,0.05)'; g.fillRect(w * 0.5, 0, w * 0.06, h);
-  }, 64, 8);
-  beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping;
-
-  M = {
-    iron:     std({ color: 0x4a5059, metalness: 0.55, roughness: 0.62 }),
-    alu:      std({ color: 0x9aa2ac, metalness: 0.80, roughness: 0.42 }),
-    aluCast:  std({ color: 0x8a929c, metalness: 0.70, roughness: 0.55 }),
-    aluLight: std({ color: 0xc3cad2, metalness: 0.85, roughness: 0.30 }),
-    aluDark:  std({ color: 0x5f6771, metalness: 0.80, roughness: 0.50 }),
-    steel:    std({ color: 0xb3bbc4, metalness: 0.95, roughness: 0.22 }),
-    steelDark:std({ color: 0x5d646d, metalness: 0.90, roughness: 0.38 }),
-    chrome:   std({ color: 0xe4e9ef, metalness: 1.00, roughness: 0.08 }),
-    brass:    std({ color: 0xc8a24b, metalness: 0.92, roughness: 0.30 }),
-    rings:    std({ color: 0x1d2127, metalness: 0.85, roughness: 0.35 }),
-    ceramic:  std({ color: 0xf1f0ea, metalness: 0.0, roughness: 0.38 }),
-    gasket:   std({ color: 0x6b7178, metalness: 0.75, roughness: 0.45 }),
-    valve:    std({ color: 0xbf9566, metalness: 0.90, roughness: 0.32 }),
-    cam:      std({ color: 0xa8b1bb, metalness: 0.95, roughness: 0.18 }),
-    dark:     std({ color: 0x1a1d22, metalness: 0.50, roughness: 0.70 }),
-    soot:     std({ color: 0x2a2724, metalness: 0.30, roughness: 0.85 }),
-    plastic:  std({ color: 0x23272d, metalness: 0.05, roughness: 0.48 }),
-    paintBlue:std({ color: 0x1f5fae, metalness: 0.35, roughness: 0.35 }),
-    paintRed: std({ color: 0xb8322a, metalness: 0.35, roughness: 0.38 }),
-    pipe:     std({ color: 0xffffff, map: heatTint, emissive: 0x000000, emissiveMap: heatGlow, metalness: 0.88, roughness: 0.38 }),
-    pipe2:    std({ color: 0x8d949b, metalness: 0.88, roughness: 0.40 }),
-    belt:     std({ color: 0xffffff, map: beltTex, metalness: 0.0, roughness: 0.72 }),
-    rubber:   std({ color: 0x1c1e22, metalness: 0.0, roughness: 0.80 })
-  };
-  M.belt.userData.isBelt = true;
-  M.pipe.userData.isPipe = true;
-}
-
-/* housing materials get the cut plane + hatched "section" on back faces */
-function makeHousing(m) {
-  m.side = THREE.DoubleSide;
-  m.clippingPlanes = [cutPlane];
-  m.shadowSide = THREE.FrontSide;
-  m.userData.housing = true;
-  m.onBeforeCompile = sh => {
-    sh.uniforms.uCapOn = CAP.uCapOn;
-    sh.uniforms.uCapColor = CAP.uCapColor;
-    sh.fragmentShader = 'uniform float uCapOn;\nuniform vec3 uCapColor;\n' + sh.fragmentShader.replace(
-      '#include <dithering_fragment>',
-      `#include <dithering_fragment>
-       if (!gl_FrontFacing) {
-         if (uCapOn < 0.5) discard;
-         float h = step(0.55, fract((gl_FragCoord.x + gl_FragCoord.y) * 0.085));
-         gl_FragColor = vec4(mix(uCapColor, uCapColor * 0.62, h), gl_FragColor.a);
-       }`);
-  };
-  m.customProgramCacheKey = () => 'housing-cap';
-}
 
 /* ----------------------------------------------------------------------------
  * 6. ГЕОМЕТРИЯ: вспомогательные функции и сборщик merged-мешей
@@ -1813,7 +1565,7 @@ function adapt() {
     else if (perf.fps > 58) { if (++perf.good >= 4 && pr < MAX_PR) { pr = Math.min(MAX_PR, pr + 0.25); perf.good = 0; } }
     else perf.good = 0;
     if (pr !== pixelRatio) {
-      pixelRatio = pr;
+      storePixelRatio(pr);                  // M-02b: pixelRatio объявлен в render/scene.js
       renderer.setPixelRatio(pr);
       onResize();
     }
@@ -1876,6 +1628,7 @@ function loop() {
  * ------------------------------------------------------------------------- */
 const run = { raf: 0, stopped: false, disposed: false, lost: false, errors: 0, timer: 0 };
 const life = new AbortController();         // снимает слушатели window/document в dispose()
+setLifecycle(life, onContextLost, onContextRestored);   // M-02b: initScene() из render/scene.js вешает их с life.signal
 function stopLoop() { run.stopped = true; cancelAnimationFrame(run.raf); }
 function onContextLost() {
   if (run.stopped) return;                  // после остановки сообщение об ошибке остаётся на экране
