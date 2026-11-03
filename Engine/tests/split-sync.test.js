@@ -55,10 +55,13 @@ const RENDER = {
   'render/parts/intake.js': ['672,699p', '17dbaff08c8f679e7ae745e9f419ba3c8fa6f1866886e1a359521acae81c81c4'],
   'render/parts/exhaust.js': ['701,727p', '980e70b88fcf40862722b713f0e38ad2820d5e7234d82472c92a6a5d58b84283'],
   'render/parts/belt.js': ['729,825p', '5be95eb5e6595846d5b16ff7eab88e3244635e8efc5f5572f261f482de8c676a'],
+  'render/kinematics.js': ['850,896p', 'fb4fe8d7e49956c1192e912b08fc4ace867f31085d0874637ff01f89c1412a17'],
+  'render/effects/strokes.js': ['901,1132p', '84bcab2b11b6ad7bcb5d195e2424d8720f1714791c0624493e82abd6dcb0835c'],
 };
 // M-02b: строки связки сразу после импортов модуля → строка main.js, которая передаёт значения
 const WIRING_B = {
   'render/scene.js': ['let life, onContextLost, onContextRestored;\nconst setLifecycle = (ctl, lost, restored) => { life = ctl; onContextLost = lost; onContextRestored = restored; };\nconst storePixelRatio = pr => { pixelRatio = pr; };\n', [/^const life = new AbortController\(\);.*\nsetLifecycle\(life, onContextLost, onContextRestored\);/m, /^ +storePixelRatio\(pr\);/m]],
+  'render/effects/strokes.js': ['let ui, effSpeed;\nconst setEffectsSource = (state, speed) => { ui = state; effSpeed = speed; };\n', [/^setSpeedSource\(effSpeed\);.*\nsetEffectsSource\(ui, effSpeed\);/m]],
 };
 const cut = (s, a, b) => {
   const i = s.indexOf(a); assert.ok(i >= 0, `нет «${a}»`); assert.equal(s.indexOf(a, i + 1), -1, `«${a}» встречается дважды`);

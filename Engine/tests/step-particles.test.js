@@ -1,5 +1,6 @@
 /**
- * Регрессия stepParticles в Engine/Engine.html и Engine/src/main.js (решение 9 по плану M-01b).
+ * Регрессия stepParticles в Engine/Engine.html и модульной версии (решение 9 по плану M-01b). С M-02b функция
+ * в Engine/src/render/effects/strokes.js: раздел 8 main.js перенесён туда дословно.
  *
  * Частицы впуска и выпуска движутся по таблице пути из LUT_N точек, позиция частицы p.s лежит в [0, 1].
  * За кадр p.s сдвигается на flow · dPhi · k, где flow — подъём клапана / CAM_LIFT (0…1), dPhi — шаг угла
@@ -23,7 +24,7 @@ import { smooth } from '../src/sim/math.js';
 
 const OLD_WRAP = '    if (p.s > 1) p.s -= 1; else if (p.s < 0) p.s += 1;';
 const NEW_WRAP = '    if (p.s > 1 || p.s < 0) p.s -= Math.floor(p.s);   // one frame can move a particle by more than one period (|dPhi| <= 90°)';
-const FILES = ['../Engine.html', '../src/main.js'];
+const FILES = ['../Engine.html', '../src/render/effects/strokes.js'];
 
 // Текст function stepParticles: от объявления с начала строки до строки, где скобки { } уравновешиваются.
 function extract(file) {
