@@ -43,6 +43,18 @@ const RENDER = {
   'render/world.js': ['46,69p', 'a4a65094624d5e0a473d89d9fe3633866178adf2a67b575012ed002d0b4df754'],
   'render/scene.js': ['82,226p', 'eb7662256fc3893fb3bfc67dd365a4e66827141102caf7cb30c7576d7f40b4a9'],
   'render/materials.js': ['231,310p', '92b68aba9354fc29ff87ad24dff78b3b431815796a282e9552f709bc294d6f42'],
+  'render/parts/geometry.js': ['315,397p;412,425p', '87aa1545224f9e56891fa9e666664552af3e47944284470b025e3e637dbcaad2'],
+  'render/parts/nodes.js': ['398,411p;826,845p', '9c3e5c82887112bc31d10cd2c9850c7d49f229cbbb050197a1b98e6f9738ff50'],
+  'render/parts/block.js': ['427,466p', 'e6bb68100311b5617af0601366b37fbd22ae210941d0a964ea3d632d07cc7d42'],
+  'render/parts/crankshaft.js': ['468,508p', '67147a159f8a99588ecef8d88e6eb756ef52e72b1621e126be78841abb05d517'],
+  'render/parts/rods.js': ['510,526p', 'b6e3308bacb09ee24caf2182ff0f43a4e84c903a7c7f1a2e65cec1d2717adb12'],
+  'render/parts/pistons.js': ['528,544p', '6a3993cd67bd60a685dd88cdfcd6866c6b405c183e96e73b8e3af4bb5edc5d6d'],
+  'render/parts/head.js': ['546,588p', 'ec1bf9749270a7c80afc16fb850158ab5ccd3de05d5c7b993ef265eb07bd3186'],
+  'render/parts/valvetrain.js': ['590,654p', '23b8f8cae7945fa322c4ece2fc3f89a73fbbfa97373e292cb19ca9df4872e04c'],
+  'render/parts/sparks.js': ['656,670p', '817ff20c3ae4d31c189fe33413e8ffdf94575839516ce0501a8910fa4608731e'],
+  'render/parts/intake.js': ['672,699p', '17dbaff08c8f679e7ae745e9f419ba3c8fa6f1866886e1a359521acae81c81c4'],
+  'render/parts/exhaust.js': ['701,727p', '980e70b88fcf40862722b713f0e38ad2820d5e7234d82472c92a6a5d58b84283'],
+  'render/parts/belt.js': ['729,825p', '5be95eb5e6595846d5b16ff7eab88e3244635e8efc5f5572f261f482de8c676a'],
 };
 // M-02b: строки связки сразу после импортов модуля → строка main.js, которая передаёт значения
 const WIRING_B = {
