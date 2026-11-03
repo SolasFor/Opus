@@ -6,6 +6,8 @@
  * С X-01 Engine.html заморожен (D-17): изменения вносятся только сюда, заморозку проверяет tests/legacy-freeze.test.js.
  * M-03: сообщения о сбоях запуска (экран загрузки в index.html), потеря и восстановление WebGL-контекста,
  * остановка цикла при повторяющейся ошибке кадра, engine.dispose().
+ * M-02a: разделы 2, 3 и 9 (мини-tween, карточки деталей и шаги разборки, звук) перенесены дословно в src/anim/tween.js,
+ * src/config/parts.js, src/config/steps.js и src/audio/engine-audio.js; дословность проверяет tests/split-sync.test.js.
  */
 /* ============================================================================
  * ЧЕТЫРЁХТАКТНЫЙ ДВИГАТЕЛЬ — интерактивная 3D-разборка (рядная «четвёрка», DOHC 16V)
@@ -33,6 +35,10 @@ import { cycleDeg, cylinderPhaseDeg, strokeOf } from './sim/cycle.js';
 import { PIN_TDC } from './sim/kinematics.js';
 import { camProfileLift, valveDownAngle, lobeAngle } from './sim/valvetrain.js';
 import { volumeAt, pressureAt } from './sim/thermo.js';
+import { Ease, tweens, tween, tweenTo, updateTweens } from './anim/tween.js';
+import { NODE_INFO } from './config/parts.js';
+import { STEPS } from './config/steps.js';
+import { audio, setSpeedSource } from './audio/engine-audio.js';
 
 /* ----------------------------------------------------------------------------
  * 1. КОНСТАНТЫ — мировые единицы: 1 ед. = 100 мм (соглашение модели)
@@ -63,133 +69,12 @@ const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const $ = id => document.getElementById(id);
 
 /* ----------------------------------------------------------------------------
- * 2. МИНИ-TWEEN (замена GSAP)
+ * 2. МИНИ-TWEEN (замена GSAP) → src/anim/tween.js (M-02a)
  * ------------------------------------------------------------------------- */
-const Ease = {
-  linear: t => t,
-  outCubic: t => 1 - Math.pow(1 - t, 3),
-  inOutCubic: t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
-  inOutQuart: t => t < .5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2,
-  outExpo: t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
-  outBack: t => { const c1 = 1.4, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
-};
-const tweens = new Set();
-/* tween({dur, delay, ease, onStart, onUpdate(k), onComplete}) → {kill()} */
-function tween(o) {
-  const tw = { t: -(o.delay || 0), dur: Math.max(1e-4, o.dur || 1), ease: o.ease || Ease.inOutCubic,
-    onStart: o.onStart, onUpdate: o.onUpdate, onComplete: o.onComplete, started: false, dead: false,
-    kill() { this.dead = true; tweens.delete(this); } };
-  tweens.add(tw);
-  return tw;
-}
-/* animate obj[key] → to; `from` captured when the tween actually starts (after delay) */
-function tweenTo(obj, key, to, o = {}) {
-  let from = 0;
-  return tween({ ...o, onStart() { from = obj[key]; o.onStart && o.onStart(); },
-    onUpdate(k) { obj[key] = from + (to - from) * k; o.onUpdate && o.onUpdate(k); } });
-}
-function updateTweens(dt) {
-  for (const tw of Array.from(tweens)) {
-    if (tw.dead) continue;
-    tw.t += dt;
-    if (tw.t < 0) continue;
-    if (!tw.started) { tw.started = true; tw.onStart && tw.onStart(); }
-    const k = Math.min(1, tw.t / tw.dur);
-    tw.onUpdate && tw.onUpdate(tw.ease(k));
-    if (k >= 1 && !tw.dead) { tw.dead = true; tweens.delete(tw); tw.onComplete && tw.onComplete(); }
-  }
-}
 
 /* ----------------------------------------------------------------------------
- * 3. ДАННЫЕ: карточки деталей и шаги разборки
+ * 3. ДАННЫЕ: карточки деталей и шаги разборки → src/config/parts.js, src/config/steps.js (M-02a)
  * ------------------------------------------------------------------------- */
-const NODE_INFO = {
-  block: {
-    short: 'Блок', tag: 'Корпус', name: 'Блок цилиндров и картер',
-    desc: 'Силовая основа двигателя. Литой блок несёт четыре цилиндра и пять коренных опор коленвала, ' +
-          'воспринимает нагрузки от сгорания и передаёт их на опоры. Внутри — рубашка охлаждения и масляные каналы.',
-    specs: [['Компоновка', 'Рядная «четвёрка», открытая палуба'], ['Материал', 'Алюминий с чугунными гильзами'],
-            ['Диаметр × ход', '85 × 72 мм'], ['Рабочий объём', '1634 см³'], ['Коренные опоры', '5']]
-  },
-  crankshaft: {
-    short: 'Коленвал', tag: 'Вращающиеся детали', name: 'Коленчатый вал и маховик',
-    desc: 'Превращает возвратно-поступательное движение поршней во вращение. Шатунные шейки 1 и 4 цилиндров ' +
-          'смотрят вверх, 2 и 3 — вниз (через 180°), поэтому вспышки идут равномерно — каждые 180° поворота. ' +
-          'Маховик запасает энергию между рабочими ходами.',
-    specs: [['Материал', 'Кованая сталь, азотирование'], ['Радиус кривошипа', '36 мм (½ хода)'],
-            ['Шатунные шейки', '0° – 180° – 180° – 0°'], ['Противовесы', '8'], ['Момент инерции маховика', '0,12 кг·м²*']]
-  },
-  rods: {
-    short: 'Шатуны', tag: 'Кривошипно-шатунный механизм', name: 'Шатуны',
-    desc: 'Связывают поршни с коленвалом. Передают силу давления газов на шатунную шейку и раскачиваются ' +
-          'в плоскости вращения, создавая боковую нагрузку на юбку поршня.',
-    specs: [['Материал', 'Кованая сталь, колотая крышка'], ['Межцентровое расстояние', '125 мм'],
-            ['Нижняя головка', 'Ø 53 мм*, вкладыши'], ['Верхняя головка', 'Бронзовая втулка'], ['Масса', '480 г*']]
-  },
-  pistons: {
-    short: 'Поршни', tag: 'Возвратно-поступательные детали', name: 'Поршни с кольцами',
-    desc: 'Принимают давление газов и уплотняют камеру сгорания. Два компрессионных кольца держат давление, ' +
-          'маслосъёмное снимает масло со стенок цилиндра; юбка направляет поршень в гильзе.',
-    specs: [['Материал', 'Заэвтектический сплав Al-Si'], ['Компрессионная высота', '23 мм'],
-            ['Кольца', '2 компрессионных + 1 маслосъёмное'], ['Степень сжатия', '10,5 : 1'], ['Макс. скорость поршня', '18 м/с*']]
-  },
-  head: {
-    short: 'ГБЦ', tag: 'Уплотнение и газообмен', name: 'Головка блока и прокладка',
-    desc: 'Закрывает цилиндры сверху и образует шатровые камеры сгорания. В ней — впускные и выпускные каналы, ' +
-          'сёдла клапанов, колодцы свечей и постели распредвалов. Многослойная стальная прокладка держит давление газов, ' +
-          'охлаждающей жидкости и масла.',
-    specs: [['Материал', 'Сплав AlSi7Mg'], ['Камеры сгорания', '4 шатровые'], ['Прокладка', 'Многослойная сталь, 1,0 мм'],
-            ['Затяжка болтов', '25 Н·м + 90°'], ['Каналы', 'С вихревым (tumble) профилем']]
-  },
-  valvetrain: {
-    short: 'ГРМ', tag: 'Газораспределение', name: 'Распредвалы и клапаны',
-    desc: 'Два верхних распредвала через стаканчиковые толкатели открывают 16 клапанов. Распредвалы вращаются ' +
-          'вдвое медленнее коленвала, поэтому каждый клапан открывается один раз за цикл 720°. Пружины закрывают клапаны.',
-    specs: [['Схема', 'DOHC, 4 клапана на цилиндр'], ['Подъём клапана', '9,2 мм'], ['Фазы впуска', '11° до ВМТ … 41° после НМТ'],
-            ['Фазы выпуска', '41° до НМТ … 11° после ВМТ'], ['Привод', 'Зубчатый ремень, 2 : 1']]
-  },
-  belt: {
-    short: 'Ремень ГРМ', tag: 'Привод', name: 'Ремень ГРМ и шестерни',
-    desc: 'Зубчатый ремень синхронизирует распредвалы с коленвалом: шестерня распредвала вдвое больше шестерни коленвала ' +
-          '(40 и 20 зубьев), поэтому распредвалы делают ровно пол-оборота на оборот коленвала. Натяжной ролик выбирает слабину.',
-    specs: [['Тип', 'Зубчатый, HNBR со стекловолокном'], ['Шестерни', '20 / 40 / 40 зубьев'], ['Передаточное число', '2 : 1'],
-            ['Ширина', '25 мм'], ['Ресурс', '90 000 км']]
-  },
-  sparks: {
-    short: 'Свечи', tag: 'Зажигание', name: 'Свечи зажигания',
-    desc: 'Одна свеча на цилиндр поджигает сжатую смесь за 10° до ВМТ — пока фронт пламени разгорается, ' +
-          'поршень проходит верхнюю точку и давление достигает пика как раз в начале рабочего хода.',
-    specs: [['Тип', 'Иридиевая, тонкий электрод'], ['Зазор', '1,1 мм'], ['Резьба', 'M12 × 1,25'],
-            ['Энергия искры', '45 мДж'], ['Ресурс', '100 000 км']]
-  },
-  intake: {
-    short: 'Впуск', tag: 'Подача воздуха', name: 'Впускной коллектор и дроссель',
-    desc: 'Воздух проходит через дроссельную заслонку в ресивер и делится по четырём впускным трубам равной длины. ' +
-          'Каждая труба подводит заряд к двум впускным клапанам своего цилиндра.',
-    specs: [['Тип', 'Ресивер + 4 трубы'], ['Материал', 'Стеклонаполненный полиамид'], ['Дроссель', 'Ø 60 мм, электронный'],
-            ['Длина труб', '380 мм'], ['Объём ресивера', '2,4 л']]
-  },
-  exhaust: {
-    short: 'Выпуск', tag: 'Отвод газов', name: 'Выпускной коллектор',
-    desc: 'Собирает горячие газы из четырёх каналов в одну трубу. Трубы равной длины по схеме 4-1 помогают ' +
-          'очищать цилиндры от отработавших газов. На высоких оборотах коллектор раскаляется докрасна.',
-    specs: [['Тип', 'Трубчатый «паук» 4-1'], ['Материал', 'Нержавеющая сталь'], ['Диаметр труб', 'Ø 42 мм'],
-            ['Длина труб', '300 мм'], ['Макс. температура', '950 °C']]
-  }
-};
-
-/* порядок разборки: свечи → ремень → ГРМ → впуск → выпуск → ГБЦ → блок → поршни+шатуны → коленвал */
-const STEPS = [
-  { keys: ['sparks'],            title: 'Свечи зажигания',        note: 'Выкручиваем свечи и поднимаем их из колодцев головки.' },
-  { keys: ['belt'],              title: 'Ремень ГРМ',             note: 'Ослабляем натяжной ролик и снимаем ремень с шестерён.' },
-  { keys: ['valvetrain'],        title: 'Распредвалы и клапаны',  note: 'Снимаем крышки опор: распредвалы, толкатели, пружины и клапаны выходят вверх.' },
-  { keys: ['intake'],            title: 'Впускной коллектор',     note: 'Ресивер с дросселем и трубами отходит от впускных каналов.' },
-  { keys: ['exhaust'],           title: 'Выпускной коллектор',    note: 'Откручиваем «паук» 4-1 и сдвигаем его с выпускных каналов.' },
-  { keys: ['head'],              title: 'Головка блока',          note: 'Выкручиваем болты — головка и прокладка поднимаются с привалочной плоскости.' },
-  { keys: ['block'],             title: 'Блок цилиндров',         note: 'Снимаем блок: открываются поршни, шатуны и коленвал.' },
-  { keys: ['pistons', 'rods'],   title: 'Поршни и шатуны',        note: 'Поршни с шатунами выходят из цилиндров.' },
-  { keys: ['crankshaft'],        title: 'Коленвал и маховик',     note: 'Коленчатый вал с маховиком опускается из постелей.' }
-];
 
 /* ----------------------------------------------------------------------------
  * 4. СЦЕНА, СВЕТ, ОКРУЖЕНИЕ
@@ -1247,64 +1132,8 @@ function updateEffects(dt, dPhi) {
 }
 
 /* ----------------------------------------------------------------------------
- * 9. ЗВУК — синтез WebAudio (выключен по умолчанию)
+ * 9. ЗВУК — синтез WebAudio (выключен по умолчанию) → src/audio/engine-audio.js (M-02a)
  * ------------------------------------------------------------------------- */
-const audio = {
-  ctx: null, master: null, hiss: null, hissFilter: null, noise: null, on: false,
-  init() {
-    if (this.ctx) return;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    const ctx = this.ctx = new AC();
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -18; comp.ratio.value = 4;
-    this.master = ctx.createGain(); this.master.gain.value = 0;
-    this.master.connect(comp); comp.connect(ctx.destination);
-    const len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
-    let b0 = 0;
-    for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = 0.97 * b0 + 0.03 * w; d[i] = w * 0.5 + b0 * 3; }
-    this.noise = buf;
-    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
-    this.hissFilter = ctx.createBiquadFilter(); this.hissFilter.type = 'lowpass'; this.hissFilter.frequency.value = 300;
-    this.hiss = ctx.createGain(); this.hiss.gain.value = 0;
-    src.connect(this.hissFilter); this.hissFilter.connect(this.hiss); this.hiss.connect(this.master);
-    src.start();
-  },
-  setOn(v) {
-    this.on = v;
-    if (v) { this.init(); if (!this.ctx) return false; this.ctx.resume(); }
-    if (this.ctx) this.master.gain.setTargetAtTime(v ? 0.55 : 0, this.ctx.currentTime, 0.08);
-    return true;
-  },
-  update(running, speed) {
-    if (!this.ctx || !this.on) return;
-    const t = this.ctx.currentTime;
-    this.hiss.gain.setTargetAtTime(running ? 0.025 + 0.03 * Math.min(1, speed / 6) : 0, t, 0.2);
-    this.hissFilter.frequency.setTargetAtTime(220 + 140 * Math.min(speed, 8), t, 0.2);
-  },
-  fire(cyl) {
-    if (!this.ctx || !this.on || this.ctx.state !== 'running') return;
-    const ctx = this.ctx, t = ctx.currentTime + 0.005;
-    const sp = Math.min(effSpeed(), 10), dec = 0.22 / (1 + sp * 0.18);
-    const o = ctx.createOscillator(), og = ctx.createGain();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(120 + cyl * 4, t);
-    o.frequency.exponentialRampToValueAtTime(42, t + dec);
-    og.gain.setValueAtTime(0.0001, t);
-    og.gain.exponentialRampToValueAtTime(0.9, t + 0.006);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + dec * 1.3);
-    o.connect(og); og.connect(this.master);
-    o.start(t); o.stop(t + dec * 1.4);
-    const n = ctx.createBufferSource(); n.buffer = this.noise;
-    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700 + Math.random() * 300; bp.Q.value = 0.8;
-    const ng = ctx.createGain();
-    ng.gain.setValueAtTime(0.0001, t);
-    ng.gain.exponentialRampToValueAtTime(0.35, t + 0.004);
-    ng.gain.exponentialRampToValueAtTime(0.0001, t + dec * 0.6);
-    n.connect(bp); bp.connect(ng); ng.connect(this.master);
-    n.start(t, Math.random() * 1.5); n.stop(t + dec);
-  }
-};
 
 /* ----------------------------------------------------------------------------
  * 10. ИНТЕРФЕЙС
@@ -1317,6 +1146,7 @@ const ui = {
   pointer: new THREE.Vector2(), pointerPx: { x: 0, y: 0 }, needHover: false, down: null, dragging: false
 };
 const effSpeed = () => sim.speed * (sim.slow ? 0.2 : 1);
+setSpeedSource(effSpeed);                   // M-02a: audio.fire() берёт текущую скорость отсюда
 const raycaster = new THREE.Raycaster();
 let pickables = [];
 const el = {};
