@@ -3,7 +3,9 @@
  * Состояния (data-boot у <html>): booting → ready | failed; slow — мягкое уведомление через 15 с, не ошибка;
  * lost — потерян WebGL-контекст после запуска. Первая причина сбоя побеждает, после ready сбой запуска не объявляется,
  * ошибка загрузки модуля объясняется сразу: file:// — нужен сервер; иначе пробный запрос к CDN отличает CDN от файлов
- * приложения. Плюс статические проверки разметки и кода: main.js и модулей, вынесенных из него (M-02).
+ * приложения. M-05a: файл стилей не загрузился (onerror у <link> до или после встроенного скрипта) — сразу экран ошибки
+ * со встроенными стилями, main.js сцену не собирает. Плюс статические проверки разметки и кода: main.js и модулей,
+ * вынесенных из него (M-02).
  * Без сторонних зависимостей.
  */
 import test from 'node:test';
@@ -25,10 +27,11 @@ const THREE_URL = JSON.parse(IMPORTMAP).imports.three;
 
 function el() {
   const cls = new Set();
-  return { hidden: false, className: '', innerHTML: '', classList: { add: c => cls.add(c), remove: c => cls.delete(c), contains: c => cls.has(c) } };
+  return { hidden: false, className: '', innerHTML: '', style: { cssText: '' }, classList: { add: c => cls.add(c), remove: c => cls.delete(c), contains: c => cls.has(c) } };
 }
-// Загружает экран запуска: поддельные таймеры (tick), fetch под управлением теста, location с протоколом.
-function boot({ protocol = 'https:', fetchResult = 'pending' } = {}) {
+// Загружает экран запуска: поддельные таймеры (tick), fetch под управлением теста, location с протоколом;
+// pre — глобальные значения до встроенного скрипта (например, флаг из onerror у <link>).
+function boot({ protocol = 'https:', fetchResult = 'pending', pre = {} } = {}) {
   let now = 0, seq = 0; const timers = new Map(), listeners = {}, fetches = [], attrs = {};
   const spinner = el(), loader = el(), msg = el(), act = el();
   act.hidden = true; loader.querySelector = s => (s === '.spinner' ? spinner : null);
@@ -50,6 +53,7 @@ function boot({ protocol = 'https:', fetchResult = 'pending' } = {}) {
     String, JSON, Promise, TypeError,
   };
   g.window = g;
+  Object.assign(g, pre);
   vm.createContext(g);
   for (const s of scripts) vm.runInContext(s, g);
   const tick = ms => {
@@ -66,13 +70,16 @@ function boot({ protocol = 'https:', fetchResult = 'pending' } = {}) {
     state: attrs['data-boot'], shown: !loader.hidden && !loader.classList.contains('hide'), hidden: loader.hidden,
     spinner: !spinner.hidden, err: msg.className === 'err', msg: msg.innerHTML, act: act.hidden ? '' : act.innerHTML,
   });
-  return { g, tick, flush, view, fetches, error: message => listeners.error.forEach(fn => fn({ message })) };
+  return { g, tick, flush, view, fetches, loader, actEl: act, error: message => listeners.error.forEach(fn => fn({ message })) };
 }
 
 test('index.html: один встроенный скрипт экрана запуска, onerror у модуля main.js', () => {
   assert.equal(scripts.length, 1, 'встроенный классический <script>');
   assert.match(INDEX, /<script type="module" src="\.\/src\/main\.js" onerror="__engModuleError\(\)"><\/script>/);
   assert.match(INDEX, /<div id="loaderAct" hidden><\/div>/);
+  const links = [...INDEX.matchAll(/<link rel="stylesheet" [^>]*>/g)].map(m => m[0]);
+  assert.equal(links.length, 2);
+  for (const l of links) assert.match(l, / onerror="window\.__engStyleError \? __engStyleError\(\) : \(window\.__engStyleFailed = true\)" \/>$/);
 });
 
 test('запуск: booting, спиннер, без кнопок', () => {
@@ -146,6 +153,33 @@ test('пробный запрос завис: через 8 с — сообщен
   b.tick(1); assert.match(b.view().msg, /не загрузилась с CDN/);
 });
 
+const styleFailed = b => {
+  const v = b.view();
+  assert.equal(v.state, 'failed'); assert.ok(v.err && !v.spinner && v.shown);
+  assert.match(v.msg, /<\/b><br>Не загрузились файлы оформления приложения \(<code>styles\/<\/code>\)/);
+  assert.match(v.act, /class="btn accent"[^>]*>Повторить</); assert.match(v.act, /href="Engine\.html"/);
+  assert.match(b.loader.style.cssText, /^position:fixed;inset:0;z-index:30;display:flex;/); assert.match(b.loader.style.cssText, /background:#0f1115;.*;color-scheme:dark$/);
+  assert.equal(b.actEl.style.cssText, 'display:flex;gap:12px;align-items:center');
+  assert.equal(b.g.__engFailed, true); assert.equal(b.fetches.length, 0);
+};
+
+test('стили не загрузились до встроенного скрипта (флаг из onerror): сразу экран ошибки со своими стилями', () => {
+  const b = boot({ pre: { __engStyleFailed: true } });
+  styleFailed(b);
+  b.tick(20000); assert.equal(b.view().state, 'failed'); assert.match(b.view().msg, /файлы оформления/);
+  const ok = boot(); assert.equal(ok.view().state, 'booting'); assert.equal(ok.loader.style.cssText, '');
+});
+
+test('стили не загрузились после встроенного скрипта: __engStyleError() — то же; первая причина и ready побеждают', () => {
+  const b = boot();
+  b.g.__engStyleError(); styleFailed(b);
+  b.g.__engStyleError(); b.g.__engModuleError(); assert.match(b.view().msg, /файлы оформления/); assert.equal(b.fetches.length, 0);
+  const m = boot({ fetchResult: 'ok' }); m.g.__engFail('Первая причина'); m.g.__engStyleError();
+  assert.match(m.view().msg, /Первая причина$/); assert.equal(m.loader.style.cssText, ''); assert.equal(m.g.__engStyleFailed, true);
+  const r = boot(); r.g.__engOk = true; r.g.__engScreen('ready'); r.g.__engStyleError();
+  assert.equal(r.view().state, 'ready'); assert.equal(r.loader.style.cssText, '');
+});
+
 test('ошибка скрипта до ready: текст ошибки экранирован; после ready не показывается', () => {
   const b = boot();
   b.error('Unexpected token <img src=x onerror=alert(1)>');
@@ -153,6 +187,7 @@ test('ошибка скрипта до ready: текст ошибки экран
   assert.equal(v.state, 'failed');
   assert.match(v.msg, /Ошибка при запуске: Unexpected token &#60;img src=x onerror=alert\(1\)&#62;$/);
   assert.match(v.act, />Перезагрузить</);
+  assert.equal(b.g.__engStyleFailed, undefined, 'флаг стилей не ставится: main.js собирает сцену, как до M-05a');
   const r = boot(); r.g.__engOk = true; r.g.__engScreen('ready'); r.error('поздняя ошибка');
   assert.equal(r.view().state, 'ready');
 });
@@ -174,6 +209,7 @@ test('__engEsc экранирует & < > " \'', () => {
 
 test('main.js и модули: готовность и сбои идут через экран запуска; слушатели window/document снимаются в dispose()', () => {
   assert.match(MAIN, /window\.__engOk = true;\n\s+if \(!run\.lost\) window\.__engScreen\('ready'\);/);
+  assert.match(MAIN, /^try \{ if \(!window\.__engStyleFailed\) boot\(\); \}/m, 'не загрузились стили — сцену не собираем; другие ошибки запуск не останавливают');
   assert.doesNotMatch(APP, /loader\.remove\(\)/);
   const global = APP.split('\n').filter(l => /\b(?:window|document)\.addEventListener\(/.test(l));
   assert.ok(global.length >= 4, 'слушатели window/document');
