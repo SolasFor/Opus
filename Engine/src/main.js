@@ -27,13 +27,12 @@
  * 10. Интерфейс: разборка, шаги, вид/разрез, камера, подписи, карточки, диаграммы
  * 11. Цикл рендера, адаптивное разрешение, запуск
  * ========================================================================== */
-import { DEG, FIRE_DEG, SPARK_ADV, VS, VC } from './config/engine-spec.js';
+import { DEG, SPARK_ADV } from './config/engine-spec.js';
 import { clamp, mod } from './sim/math.js';
-import { strokeOf } from './sim/cycle.js';
-import { volumeAt, pressureAt } from './sim/thermo.js';
+import { pressureAt } from './sim/thermo.js';
 import { tweens, updateTweens } from './anim/tween.js';
 import { audio, setSpeedSource } from './audio/engine-audio.js';
-import { BASE_RPM, CAM_HOME, TGT_HOME, STROKES, $ } from './render/world.js';
+import { BASE_RPM, CAM_HOME, TGT_HOME, $ } from './render/world.js';
 import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, initScene, envRoom, envTarget, makeEnvironment, setLifecycle, storePixelRatio } from './render/scene.js';
 import { nodes, nodesList, buildEngine } from './render/parts/nodes.js';
 import { sim, cycDeg, phaseOf, updateKinematics } from './render/kinematics.js';
@@ -45,6 +44,9 @@ import { tweenCamera, frameBox, cameraPreset, resetView, focusOn } from './ui/ca
 import { setView, cycleView, setCut } from './ui/view.js';
 import { pick, select, isolate, setHover } from './ui/selection.js';
 import { updateLive } from './ui/info.js';
+import { setupCharts } from './ui/charts/canvas.js';
+import { TL, drawTiming } from './ui/charts/timing.js';
+import { drawPV } from './ui/charts/pv.js';
 import { buildLabels, updateLabels } from './ui/labels.js';
 import { updateMaterials } from './ui/highlight.js';
 import { setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, togglePanels, setPanel, layoutPanels, setToggle, screenshot } from './ui/controls.js';
@@ -90,97 +92,6 @@ import { setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, togg
  * ------------------------------------------------------------------------- */
 setSpeedSource(effSpeed);                   // M-02a: audio.fire() берёт текущую скорость отсюда
 setEffectsSource(ui, effSpeed);             // M-02b: эффекты тактов читают ui.isolated, ui.view и effSpeed()
-
-/* ---------- HUD charts (canvas 2D) ---------- */
-const charts = { dpr: 1, pvBg: null, trail: [] };
-function sizeCanvas(c) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2), w = c.clientWidth || 288, h = +c.getAttribute('height');
-  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); c.style.height = h + 'px';
-  return { w, h, dpr };
-}
-function setupCharts() {
-  charts.t = sizeCanvas(el.timing);
-  charts.p = sizeCanvas(el.pv);
-  charts.pvBg = null;
-}
-const TL = { left: 26, right: 66, top: 8, row: 20 };
-function drawTiming() {
-  const { w, h, dpr } = charts.t, g = el.timing.getContext('2d');
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, w, h);
-  const x0 = TL.left, x1 = w - TL.right, X = d => x0 + (x1 - x0) * d / 720;
-  const cd = cycDeg();
-  g.font = '600 10.5px Inter, Segoe UI, system-ui, sans-serif';
-  g.textBaseline = 'middle';
-  for (let i = 0; i < 4; i++) {
-    const y = TL.top + i * TL.row, phi = phaseOf(i), sNow = strokeOf(phi);
-    if (i === ui.pvCyl) { g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(2, y - 1, w - 4, TL.row - 2); }
-    g.fillStyle = i === ui.pvCyl ? '#fff' : '#8d9aab';
-    g.fillText('Ц' + (i + 1), 6, y + TL.row / 2 - 1);
-    for (let k = 0; k < 4; k++) {
-      const a = mod(FIRE_DEG[i] + k * 180, 720), b = a + 180;
-      g.fillStyle = STROKES[k].color;
-      g.globalAlpha = k === sNow ? 0.95 : 0.38;
-      const seg = (s, e) => g.fillRect(X(s) + 0.5, y + 3, X(e) - X(s) - 1, TL.row - 8);
-      if (b <= 720) seg(a, b); else { seg(a, 720); seg(0, b - 720); }
-    }
-    g.globalAlpha = 1;
-    const sp = mod(FIRE_DEG[i] - SPARK_ADV, 720);   // spark mark
-    g.fillStyle = '#fff3a8';
-    g.beginPath(); g.moveTo(X(sp), y + 1); g.lineTo(X(sp) + 3.5, y - 3); g.lineTo(X(sp) - 3.5, y - 3); g.fill();
-    g.fillStyle = STROKES[sNow].color;
-    g.fillText(STROKES[sNow].short, x1 + 7, y + TL.row / 2 - 1);
-  }
-  g.fillStyle = '#5f6b7b'; g.font = '600 9px Inter, system-ui, sans-serif';
-  [0, 180, 360, 540, 720].forEach(d => { g.textAlign = d === 0 ? 'left' : d === 720 ? 'right' : 'center'; g.fillText(d + '°', X(d), h - 6); });
-  g.textAlign = 'left';
-  const cx = X(cd);
-  g.strokeStyle = '#fff'; g.lineWidth = 1.5;
-  g.beginPath(); g.moveTo(cx, TL.top - 4); g.lineTo(cx, TL.top + 4 * TL.row - 2); g.stroke();
-  g.fillStyle = '#fff'; g.beginPath(); g.arc(cx, TL.top - 4, 2.6, 0, Math.PI * 2); g.fill();
-}
-const PV = { l: 34, r: 10, t: 10, b: 20, pMax: 60 };
-function pvXY(V, p, w, h) {
-  const vMin = VC * 0.9, vMax = (VC + VS) * 1.04;
-  return [PV.l + (w - PV.l - PV.r) * (V - vMin) / (vMax - vMin), h - PV.b - (h - PV.t - PV.b) * Math.min(p, PV.pMax) / PV.pMax];
-}
-function drawPV() {
-  const { w, h, dpr } = charts.p;
-  if (!charts.pvBg) {   // static loop, drawn once
-    const c = document.createElement('canvas');
-    c.width = w * dpr; c.height = h * dpr;
-    const g = c.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1;
-    g.font = '600 9px Inter, system-ui, sans-serif'; g.fillStyle = '#5f6b7b';
-    [0, 20, 40, 60].forEach(p => { const [, y] = pvXY(VC, p, w, h); g.beginPath(); g.moveTo(PV.l, y); g.lineTo(w - PV.r, y); g.stroke(); g.fillText(p, 6, y + 3); });
-    const [xt] = pvXY(VC, 0, w, h), [xb] = pvXY(VC + VS, 0, w, h);
-    g.textAlign = 'center';
-    g.fillText('ВМТ', xt, h - 6); g.fillText('НМТ', xb, h - 6);
-    g.fillText('V, см³ →', (xt + xb) / 2, h - 6);
-    g.save(); g.translate(10, PV.t + 6); g.textAlign = 'left'; g.fillText('p, бар', 12, 0); g.restore();
-    g.lineWidth = 2; g.lineJoin = 'round';
-    for (let phi = 0; phi < 720; phi += 2) {
-      const [xa, ya] = pvXY(volumeAt(phi), pressureAt(phi), w, h), [xb2, yb] = pvXY(volumeAt(phi + 2), pressureAt(phi + 2), w, h);
-      g.strokeStyle = STROKES[strokeOf(phi)].color;
-      g.beginPath(); g.moveTo(xa, ya); g.lineTo(xb2, yb); g.stroke();
-    }
-    charts.pvBg = c;
-  }
-  const g = el.pv.getContext('2d');
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.clearRect(0, 0, el.pv.width, el.pv.height);
-  g.drawImage(charts.pvBg, 0, 0);
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const phi = phaseOf(ui.pvCyl), p = pressureAt(phi), [x, y] = pvXY(volumeAt(phi), p, w, h);
-  const col = STROKES[strokeOf(phi)].color;
-  g.fillStyle = col; g.globalAlpha = 0.25;
-  g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.fill();
-  g.globalAlpha = 1; g.fillStyle = '#fff';
-  g.beginPath(); g.arc(x, y, 3.6, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = col; g.lineWidth = 2; g.stroke();
-  el.pvVal.textContent = p.toFixed(1) + ' бар · ' + STROKES[strokeOf(phi)].name.toLowerCase();
-}
 
 function initUI() {
   ['explodeSlider', 'explodeVal', 'btnAssemble', 'btnExplode', 'stepDots', 'stepCount', 'stepTitle', 'stepNote', 'btnPrev', 'btnNext',
