@@ -2,6 +2,7 @@
  * setupCharts().
  * M-02c: начало подраздела «HUD charts» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
+ * M-05b: диаграммы фаз на canvas больше нет (строки «Фаз» — ui/phases.js), setupCharts() размечает только p–V.
  */
 import { el } from '../state.js';
 
@@ -13,7 +14,6 @@ function sizeCanvas(c) {
   return { w, h, dpr };
 }
 function setupCharts() {
-  charts.t = sizeCanvas(el.timing);
   charts.p = sizeCanvas(el.pv);
   charts.pvBg = null;
 }

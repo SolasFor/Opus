@@ -1,6 +1,7 @@
 /* p–V диаграмма выбранного цилиндра: петля рисуется один раз, точка текущего состояния — в каждом кадре, drawPV().
  * M-02c: из подраздела «HUD charts» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
+ * M-05b: значение в заголовке раздела p–V считает pvValue(); оно обновляется и в свёрнутом разделе (ui/hud.js).
  */
 import { VS, VC } from '../../config/engine-spec.js';
 import { strokeOf } from '../../sim/cycle.js';
@@ -11,6 +12,7 @@ import { ui, el } from '../state.js';
 import { charts } from './canvas.js';
 
 const PV = { l: 34, r: 10, t: 10, b: 20, pMax: 60 };
+function pvValue() { const phi = phaseOf(ui.pvCyl); return pressureAt(phi).toFixed(1) + ' бар · ' + STROKES[strokeOf(phi)].name.toLowerCase(); }
 function pvXY(V, p, w, h) {
   const vMin = VC * 0.9, vMax = (VC + VS) * 1.04;
   return [PV.l + (w - PV.l - PV.r) * (V - vMin) / (vMax - vMin), h - PV.b - (h - PV.t - PV.b) * Math.min(p, PV.pMax) / PV.pMax];
@@ -50,7 +52,8 @@ function drawPV() {
   g.globalAlpha = 1; g.fillStyle = '#fff';
   g.beginPath(); g.arc(x, y, 3.6, 0, Math.PI * 2); g.fill();
   g.strokeStyle = col; g.lineWidth = 2; g.stroke();
-  el.pvVal.textContent = p.toFixed(1) + ' бар · ' + STROKES[strokeOf(phi)].name.toLowerCase();
+  const val = pvValue();
+  if (el.pvVal.textContent !== val) el.pvVal.textContent = val;
 }
 
-export { drawPV };
+export { pvValue, drawPV };

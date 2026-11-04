@@ -4,6 +4,11 @@
  * проверяет tests/split-sync.test.js.
  * life остаётся в main.js (M-03): main.js передаёт его через setInputLifecycle() при загрузке, до вызова initUI();
  * слушатели window и document снимаются в dispose().
+ * M-05b: новая разметка (верхняя панель, боковые панели, лента времени): меню «Камера» и справка — ui/menus.js,
+ * раскладка панелей и сворачиваемые разделы — ui/layout.js. Esc закрывает по порядку: меню → справка → изоляция →
+ * выбор; пока открыта справка, другие клавиши не действуют, кроме ? и Shift+/ (закрыть). Строки «Фаз» вместо диаграммы
+ * на canvas — ui/phases.js: нажатие на строку выбирает цилиндр для p–V. Центр кадра камеры следует за свободной
+ * областью между панелями (ui/layout.js → ui/camera.js, П-4), в том числе при изменении размера окна.
  */
 import { DEG } from '../config/engine-spec.js';
 import { audio } from '../audio/engine-audio.js';
@@ -15,25 +20,27 @@ import { inPts, exPts } from '../render/effects/strokes.js';
 import { ui, el } from './state.js';
 import { meanProgress, boundsWith } from './explode.js';
 import { exitStepMode, animateExplode, nextStep, prevStep, updateStepUI } from './steps.js';
-import { frameBox, cameraPreset, resetView, focusOn } from './camera.js';
+import { frameBox, cameraPreset, resetView, applyViewShift, focusOn } from './camera.js';
 import { setView, cycleView, setCut } from './view.js';
 import { pick, select, isolate, setHover } from './selection.js';
 import { updateLive } from './info.js';
 import { setupCharts } from './charts/canvas.js';
-import { TL } from './charts/timing.js';
+import { initPhases } from './phases.js';
 import { buildLabels } from './labels.js';
-import { updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, togglePanels, setPanel, layoutPanels, setToggle, screenshot } from './controls.js';
+import { updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot } from './controls.js';
+import { fitLayout, onFreeArea, togglePanels, toggleDrawer, initSections } from './layout.js';
+import { menuOpen, setMenu, toggleMenu, openHelp, closeHelp, toggleHelp, dropFocus } from './menus.js';
 
 let life;
 const setInputLifecycle = ctl => { life = ctl; };
 
 function initUI() {
-  ['explodeSlider', 'explodeVal', 'btnAssemble', 'btnExplode', 'stepDots', 'stepCount', 'stepTitle', 'stepNote', 'btnPrev', 'btnNext',
-   'viewVal', 'cutRow', 'cutSlider', 'cutVal', 'btnLabels', 'btnRotate', 'btnSound', 'btnShot', 'partChips', 'partCount',
-   'hud', 'hudHide', 'hudOpen', 'cycle', 'cycleHide', 'cycleOpen', 'fps', 'btnRun', 'btnSlow', 'speedSlider', 'speedVal',
-   'angleSlider', 'angleVal', 'btnDegBack', 'btnDegFwd', 'timing', 'pv', 'pvTitle', 'pvVal', 'pvWrap',
+  ['appbar', 'explodeSlider', 'explodeVal', 'explodeHdr', 'btnAssemble', 'btnExplode', 'stepDots', 'stepCount', 'stepTitle', 'stepNote', 'btnPrev', 'btnNext',
+   'cutRow', 'cutSlider', 'cutVal', 'btnCam', 'camMenu', 'btnReset', 'btnLabels', 'btnRotate', 'btnSound', 'btnShot', 'btnPanels',
+   'drawerLeft', 'drawerRight', 'partChips', 'partCount', 'hud', 'cycle', 'timeline', 'fps', 'btnRun', 'btnSlow', 'speedSlider', 'speedVal',
+   'angleSlider', 'angleVal', 'angleSub', 'angleStroke', 'btnDegBack', 'btnDegFwd', 'phases', 'tlBands', 'tlTicks', 'pv', 'pvTitle', 'pvVal',
    'infocard', 'infoClose', 'infoTag', 'infoTitle', 'infoDesc', 'infoSpecs', 'infoLive', 'btnFocus', 'btnIsolate',
-   'isoBar', 'isoName', 'btnUnIso', 'toast', 'flash', 'help', 'helpClose', 'helpLink', 'labels', 'tooltip'].forEach(id => { el[id] = $(id); });
+   'isoBar', 'isoName', 'btnUnIso', 'toast', 'flash', 'help', 'helpClose', 'helpLink', 'helpLink2', 'labels', 'tooltip'].forEach(id => { el[id] = $(id); });
   el.canvas = renderer.domElement;
   el.fireChips = Array.from(document.querySelectorAll('.fire .c'));
 
@@ -55,7 +62,10 @@ function initUI() {
   el.cutSlider.addEventListener('input', () => setCut(+el.cutSlider.value));
   el.cutSlider.addEventListener('change', () => el.cutSlider.blur());
   setCut(+el.cutSlider.value);
-  document.querySelectorAll('#camRow .btn').forEach(b => b.addEventListener('click', () => cameraPreset(b.dataset.cam)));
+  el.btnCam.addEventListener('click', toggleMenu);
+  el.camMenu.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', () => { setMenu(false); cameraPreset(b.dataset.cam); }));
+  el.btnReset.addEventListener('click', () => { setMenu(false); resetView(); });
+  document.addEventListener('pointerdown', e => { if (menuOpen() && !e.target.closest('.menu-wrap')) setMenu(false); }, { signal: life.signal });
   el.btnLabels.addEventListener('click', () => { ui.labels = !ui.labels; setToggle(el.btnLabels, ui.labels); });
   el.btnRotate.addEventListener('click', () => { ui.autoRotate = !ui.autoRotate; setToggle(el.btnRotate, ui.autoRotate); ui.lastInteract = 0; });
   el.btnSound.addEventListener('click', toggleSound);
@@ -65,6 +75,8 @@ function initUI() {
   nodesList.forEach(n => {
     const c = document.createElement('button');
     c.className = 'chip';
+    c.type = 'button';
+    c.setAttribute('aria-pressed', 'false');
     c.textContent = n.userData.info.short;
     c.title = n.userData.info.name;
     c.addEventListener('click', () => select(ui.selected === n ? null : n));
@@ -74,13 +86,18 @@ function initUI() {
   });
   el.partCount.textContent = nodesList.length + ' узлов';
 
-  // panels
-  el.hudHide.addEventListener('click', () => setPanel(el.hud, el.hudOpen, true));
-  el.hudOpen.addEventListener('click', () => setPanel(el.hud, el.hudOpen, false));
-  el.cycleHide.addEventListener('click', () => setPanel(el.cycle, el.cycleOpen, true));
-  el.cycleOpen.addEventListener('click', () => setPanel(el.cycle, el.cycleOpen, false));
-  el.helpLink.addEventListener('click', () => el.help.classList.add('on'));
-  el.helpClose.addEventListener('click', () => el.help.classList.remove('on'));
+  // panels, help
+  el.drawerLeft.addEventListener('click', () => toggleDrawer('hud'));
+  el.drawerRight.addEventListener('click', () => toggleDrawer('cycle'));
+  el.btnPanels.addEventListener('click', () => togglePanels());
+  initSections();
+  onFreeArea(applyViewShift);               // П-4: центр кадра — в свободной области между панелями
+  fitLayout();
+  el.helpLink.addEventListener('click', openHelp);
+  el.helpLink2.addEventListener('click', openHelp);
+  el.helpClose.addEventListener('click', closeHelp);
+  el.help.addEventListener('click', e => { if (e.target === el.help && outside(el.help, e)) closeHelp(); });   // щелчок по фону
+  el.help.addEventListener('close', dropFocus);
 
   // engine controls
   el.btnRun.addEventListener('click', toggleRun);
@@ -111,11 +128,8 @@ function initUI() {
   };
   holdRepeat(el.btnDegBack, -1);
   holdRepeat(el.btnDegFwd, 1);
-  el.timing.addEventListener('click', e => {
-    const r = el.timing.getBoundingClientRect();
-    const i = Math.floor((e.clientY - r.top - TL.top) / TL.row);
-    if (i >= 0 && i < 4) setPvCyl(i);
-  });
+  initPhases();
+  el.phases.addEventListener('click', e => { const r = e.target.closest('.ph-row'); if (r) setPvCyl(+r.dataset.c); });
   el.fireChips.forEach(c => c.addEventListener('click', () => setPvCyl(+c.dataset.c)));
 
   // info card
@@ -167,10 +181,17 @@ function initUI() {
   updateStepUI();
   buildLabels();
   setupCharts();
+  setPvCyl(ui.pvCyl);
+}
+function outside(box, e) {
+  const r = box.getBoundingClientRect();
+  return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
 }
 function setPvCyl(i) {
   ui.pvCyl = i;
-  el.pvTitle.textContent = 'p–V диаграмма · цилиндр ' + (i + 1);
+  el.pvTitle.textContent = 'p–V · цилиндр ' + (i + 1);
+  el.fireChips.forEach(c => c.setAttribute('aria-pressed', +c.dataset.c === i));
+  el.phaseRows.forEach(r => r.setAttribute('aria-pressed', +r.dataset.c === i));
   updateLive(true);
 }
 function toggleSound() {
@@ -185,6 +206,14 @@ function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key;
   ui.lastInteract = performance.now();
+  if (k === 'Escape') {
+    if (menuOpen()) setMenu(false);
+    else if (el.help.open) closeHelp();
+    else if (ui.isolated) isolate(null);
+    else if (ui.selected) select(null, false);
+    return;
+  }
+  if (el.help.open) { if (k === '?' || (e.code === 'Slash' && e.shiftKey)) closeHelp(); return; }
   if (k === ' ') { toggleRun(); e.preventDefault(); }
   else if (k === 'ArrowRight') { nextStep(); e.preventDefault(); }
   else if (k === 'ArrowLeft') { prevStep(); e.preventDefault(); }
@@ -192,12 +221,7 @@ function onKey(e) {
   else if (k === '.' || k === '>' || k === 'ю' || k === 'Ю') nudgeCrank(e.shiftKey ? 1 : 5);
   else if (k === '+' || k === '=') { el.speedSlider.value = Math.min(100, +el.speedSlider.value + 5); updateSpeedUI(); }
   else if (k === '-' || k === '_') { el.speedSlider.value = Math.max(0, +el.speedSlider.value - 5); updateSpeedUI(); }
-  else if (k === 'Escape') {
-    if (el.help.classList.contains('on')) el.help.classList.remove('on');
-    else if (ui.isolated) isolate(null);
-    else if (ui.selected) select(null, false);
-  }
-  else if (k === '?') el.help.classList.toggle('on');
+  else if (k === '?') toggleHelp();
   else if (/^[1-4]$/.test(k)) cameraPreset(['front', 'side', 'top', 'iso'][+k - 1]);
   else {
     const code = e.code;   // layout-independent (works with the Russian layout too)
@@ -212,7 +236,7 @@ function onKey(e) {
     else if (code === 'KeyH') togglePanels();
     else if (code === 'KeyF') { if (ui.selected) focusOn(ui.selected); }
     else if (code === 'KeyI') { if (ui.selected) isolate(ui.isolated === ui.selected ? null : ui.selected); }
-    else if (code === 'Slash' && e.shiftKey) el.help.classList.toggle('on');
+    else if (code === 'Slash' && e.shiftKey) toggleHelp();
   }
 }
 function onResize() {
@@ -220,8 +244,8 @@ function onResize() {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   [inPts, exPts].forEach(P => { P.points.material.uniforms.uScale.value = innerHeight * pixelRatio * 0.5; });
+  fitLayout();
   setupCharts();
-  layoutPanels();
 }
 
 export { initUI, onResize, setInputLifecycle };
