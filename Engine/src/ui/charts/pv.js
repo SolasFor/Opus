@@ -23,7 +23,7 @@ function drawPV() {
     const g = c.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1;
-    g.font = '600 9px Inter, system-ui, sans-serif'; g.fillStyle = '#5f6b7b';
+    g.font = '600 9px system-ui, sans-serif'; g.fillStyle = '#5f6b7b';
     [0, 20, 40, 60].forEach(p => { const [, y] = pvXY(VC, p, w, h); g.beginPath(); g.moveTo(PV.l, y); g.lineTo(w - PV.r, y); g.stroke(); g.fillText(p, 6, y + 3); });
     const [xt] = pvXY(VC, 0, w, h), [xb] = pvXY(VC + VS, 0, w, h);
     g.textAlign = 'center';

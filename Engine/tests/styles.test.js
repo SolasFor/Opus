@@ -12,15 +12,20 @@
  *      получится старый текст. Правки с причиной меняют вид намеренно.
  *   4) Старые переменные в :root app.css (--bg, --glass, --stroke, --txt, --muted, --accent, --accent-2, --c-*,
  *      --radius) — псевдонимы токенов.
+ *   5) Шрифт интерфейса — системный (--font-ui, П-2, T-27): Inter был объявлен, но не загружался. Его нет ни в стилях,
+ *      ни в разметке, ни в коде, в том числе в шрифтах диаграмм на canvas.
  * Без сторонних зависимостей.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const INDEX = read('../index.html'), APP = read('../styles/app.css'), TOKENS = read('../styles/tokens.css');
+const SRC = new URL('../src/', import.meta.url);
+const walk = d => readdirSync(new URL(d, SRC), { withFileTypes: true })
+  .flatMap(e => e.isDirectory() ? walk(`${d}${e.name}/`) : e.name.endsWith('.js') ? [d + e.name] : []);
 const HEAD = INDEX.slice(0, INDEX.indexOf('</head>'));
 const BASE = 'fa3e6ca5548882e0ff817bc0f4a4feac8983f6381397103648e8dfdb0e3e45b0';
 // правки после переноса: [старый текст, новый текст, сколько раз встречается, причина — если вид меняется намеренно]
@@ -36,6 +41,8 @@ const EDITS = [
     '--c-in:var(--stroke-intake); --c-comp:var(--stroke-compression); --c-pow:var(--stroke-power); --c-ex:var(--stroke-exhaust);', 1],
   ['--radius:16px;', '--radius:var(--radius-lg);', 1],
   ['ui-monospace,Menlo,Consolas,monospace', 'var(--font-mono)', 4],
+  ['font-family:"Inter","Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;', 'font-family:var(--font-ui);', 1,
+    'П-2, T-27: системный шрифт; Inter был объявлен, но не загружался'],
 ];
 const ALIASES = ['--bg', '--glass', '--stroke', '--txt', '--muted', '--accent', '--accent-2', '--c-in', '--c-comp', '--c-pow', '--c-ex', '--radius'];
 const sha = s => createHash('sha256').update(s, 'utf8').digest('hex');
@@ -87,4 +94,11 @@ test('app.css: старые переменные — псевдонимы ток
   const decl = new Map(root.split(';').map(s => s.trim()).filter(Boolean).map(d => d.split(/:(.*)/s).slice(0, 2).map(x => x.trim())));
   assert.deepEqual([...decl.keys()], ALIASES);
   for (const [k, v] of decl) { const m = v.match(/^var\((--[\w-]+)\)$/); assert.ok(m && TOK.has(m[1]), `${k}: ${v}`); }
+});
+
+test('шрифт: системный --font-ui, Inter нигде не упоминается', () => {
+  assert.match(noComments(body(APP)), /^html,body\{[^}]*font-family:var\(--font-ui\);/m);
+  assert.match(TOK.get('--font-ui'), /^system-ui,/);
+  for (const [name, text] of [['index.html', INDEX], ['styles/app.css', APP], ['styles/tokens.css', TOKENS],
+    ...walk('').map(f => [`src/${f}`, read(`../src/${f}`)])]) assert.doesNotMatch(text, /\bInter\b/, name);
 });

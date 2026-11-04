@@ -17,7 +17,7 @@ function drawTiming() {
   g.clearRect(0, 0, w, h);
   const x0 = TL.left, x1 = w - TL.right, X = d => x0 + (x1 - x0) * d / 720;
   const cd = cycDeg();
-  g.font = '600 10.5px Inter, Segoe UI, system-ui, sans-serif';
+  g.font = '600 10.5px Segoe UI, system-ui, sans-serif';
   g.textBaseline = 'middle';
   for (let i = 0; i < 4; i++) {
     const y = TL.top + i * TL.row, phi = phaseOf(i), sNow = strokeOf(phi);
@@ -38,7 +38,7 @@ function drawTiming() {
     g.fillStyle = STROKES[sNow].color;
     g.fillText(STROKES[sNow].short, x1 + 7, y + TL.row / 2 - 1);
   }
-  g.fillStyle = '#5f6b7b'; g.font = '600 9px Inter, system-ui, sans-serif';
+  g.fillStyle = '#5f6b7b'; g.font = '600 9px system-ui, sans-serif';
   [0, 180, 360, 540, 720].forEach(d => { g.textAlign = d === 0 ? 'left' : d === 720 ? 'right' : 'center'; g.fillText(d + '°', X(d), h - 6); });
   g.textAlign = 'left';
   const cx = X(cd);
