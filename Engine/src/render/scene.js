@@ -1,14 +1,16 @@
-/* Сцена: WebGL-рендерер, камера и OrbitControls, свет, окружение (PMREM RoomEnvironment), фон и пол.
+/* Сцена: WebGL-рендерер, камера и OrbitControls, свет, окружение (PMREM), фон и пол.
  * M-02b: раздел 4 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
  * проверяет tests/split-sync.test.js.
  * life и обработчики потери и восстановления контекста остаются в main.js (раздел 11): main.js передаёт их
  * через setLifecycle() при загрузке, до вызова initScene(). Адаптивное разрешение в main.js меняет pixelRatio
  * через storePixelRatio().
+ * M-07a: студийный свет и окружение — StudioEnvironment из render/studio.js вместо RoomEnvironment; яркости
+ * источников умножены на GAIN, экспозиция прежняя (почему — в studio.js); тени чуть резче (radius 2).
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { FLOOR_Y, CAM_HOME, TGT_HOME, $ } from './world.js';
+import { GAIN, StudioEnvironment } from './studio.js';
 
 let life, onContextLost, onContextRestored;
 const setLifecycle = (ctl, lost, restored) => { life = ctl; onContextLost = lost; onContextRestored = restored; };
@@ -59,9 +61,9 @@ function initScene() {
 
   clock = new THREE.Clock();
 
-  // light: soft sky/ground + warm key with shadows + cool fill + cyan rim
-  scene.add(new THREE.HemisphereLight(0xa9bcd6, 0x1b1712, 0.55));
-  keyLight = new THREE.DirectionalLight(0xfff1e0, 2.3);
+  // light: soft sky/ground + warm key with shadows + cool fill + cyan rim (M-07a: studio levels × GAIN)
+  scene.add(new THREE.HemisphereLight(0xa9bcd6, 0x1b1712, 0.30 * GAIN));
+  keyLight = new THREE.DirectionalLight(0xfff1e0, 1.9 * GAIN);
   keyLight.position.set(7, 12, 7.5);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(2048, 2048);
@@ -69,12 +71,12 @@ function initScene() {
   sc.near = 2; sc.far = 40; sc.left = -9; sc.right = 9; sc.top = 11; sc.bottom = -8;
   keyLight.shadow.bias = -0.0005;
   keyLight.shadow.normalBias = 0.03;
-  keyLight.shadow.radius = 3;
+  keyLight.shadow.radius = 2;
   keyLight.target.position.set(0, 1.5, 0);
   scene.add(keyLight, keyLight.target);
-  const fill = new THREE.DirectionalLight(0x9cbcff, 0.55);
+  const fill = new THREE.DirectionalLight(0x9cbcff, 0.30 * GAIN);
   fill.position.set(-9, 4, 6);
-  const rim = new THREE.DirectionalLight(0x7fdcff, 1.25);
+  const rim = new THREE.DirectionalLight(0x7fdcff, 0.85 * GAIN);
   rim.position.set(-5, 7, -10);
   scene.add(fill, rim);
   // single moving combustion light (always present → no shader recompiles)
@@ -92,8 +94,8 @@ function initScene() {
 let envRoom = null, envTarget = null;
 function makeEnvironment() {
   const pmrem = new THREE.PMREMGenerator(renderer);
-  envRoom = new RoomEnvironment(renderer);
-  envTarget = pmrem.fromScene(envRoom, 0.04);
+  envRoom = new StudioEnvironment();
+  envTarget = pmrem.fromScene(envRoom, 0.02);
   pmrem.dispose();
   return envTarget.texture;
 }

@@ -1,11 +1,12 @@
 /**
- * M-07a: облик модульной версии — материалы и процедурная фактура.
+ * M-07a: облик модульной версии — материалы, процедурная фактура, сглаживание нормалей, свет.
  * 1) render/surface.js — чистый модуль без импортов. patchShader() вставляет фактуру сразу после нужных фрагментов
  *    шейдера three.js и падает с понятной ошибкой, если фрагмента нет (three.js сменил имена) — фактура не пропадает
  *    молча. applySurface() дополняет onBeforeCompile и ключ программы материала; без WebGL2 шейдер не меняет;
  *    материал без вида фактуры или с неизвестным видом не трогает.
  * 2) Статически: каждый материал M.x, который упоминает код, объявлен в createMaterials(); вид фактуры userData.surf —
- *    из KINDS; nodeMat() подключает фактуру к клону материала до makeHousing(); extrudeX и extrudeY сглаживают нормали.
+ *    из KINDS; nodeMat() подключает фактуру к клону материала до makeHousing(); extrudeX и extrudeY сглаживают нормали;
+ *    свет и студийное окружение умножены на GAIN при прежней экспозиции 1,0.
  * Без сторонних зависимостей.
  */
 import test from 'node:test';
@@ -113,6 +114,19 @@ test('extrudeX и extrudeY сглаживают нормали до угла 38�
     const body = geo.slice(geo.indexOf(`function ${f}(`), geo.indexOf('\n}\n', geo.indexOf(`function ${f}(`)));
     assert.match(body, /\n  return smooth\(g\);$/, f);
   }
+});
+
+test('свет: студийное окружение и источники умножены на GAIN, экспозиция 1,0 — свечение и частицы прежние', () => {
+  const scene = read('../src/render/scene.js'), studio = read('../src/render/studio.js');
+  assert.match(scene, /^  renderer\.toneMappingExposure = 1\.0;$/m);
+  assert.match(scene, /^  envRoom = new StudioEnvironment\(\);$/m);
+  assert.doesNotMatch(scene, /RoomEnvironment\(/);
+  const lights = [...scene.matchAll(/new THREE\.(?:Hemisphere|Directional)Light\(([^()]*)\)/g)].map(m => m[1]);
+  assert.equal(lights.length, 4, 'небо, ключевой, заполняющий, контровой');
+  for (const l of lights) assert.match(l, /, \d\.\d+ \* GAIN$/, l);
+  assert.match(studio, /^const GAIN = 0\.92;$/m);
+  assert.match(studio, /new THREE\.Color\(c\)\.multiplyScalar\(k \* GAIN\)/);
+  assert.equal((studio.match(/^ {4}box\(/gm) || []).length, 8, 'стены, пол и шесть световых панелей');
 });
 
 test('nodeMat(): фактура подключается к клону материала узла до makeHousing()', () => {
