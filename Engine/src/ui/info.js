@@ -2,7 +2,7 @@
  * M-02c: подраздел «info card» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
  * M-05b: карточка — раздел «Деталь» правой панели: при выборе детали раздел раскрывается, а панель показывается
- * (на планшете — правая шторка). Прежнего сжатия панели под карточкой (layoutPanels) больше нет.
+ * (на планшете — правая шторка) и прокручивается к началу. Прежнего сжатия панели под карточкой (layoutPanels) больше нет.
  */
 import { DEG, FIRE_DEG, CRANK_R, ROD_L, CAM_LIFT, SPARK_ADV } from '../config/engine-spec.js';
 import { mod } from '../sim/math.js';
@@ -31,6 +31,7 @@ function openInfo(node) {
   el.infocard.classList.add('open');
   setSection('card', true);
   revealPanel('cycle');
+  el.cycle.scrollTop = 0;                   // карточка — первый раздел панели: видна с заголовком и кнопкой ×
 }
 function closeInfo() { el.infocard.classList.remove('open'); el.infoLive.textContent = ''; }
 function liveRows(key) {
