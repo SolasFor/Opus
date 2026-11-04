@@ -130,7 +130,13 @@ test('уровень «низкий»: вдвое меньше сегменто�
     assert.equal(lodSeg(true, n), want, `${n}`); assert.equal(lodSeg(false, n), n, `${n}`);
   }
   const g = GEO.slice(GEO.indexOf('const G = {'), GEO.indexOf('\n};\n', GEO.indexOf('const G = {')));
-  for (const k of ['cyl', 'cylX', 'cylZ', 'torusX', 'torusY', 'lathe', 'tube']) assert.match(g, new RegExp(`^  ${k}: \\([^\\n]*lodSeg\\(`, 'm'), `G.${k}`);
+  // каждый аргумент-сегменты конструктора — через lodSeg
+  const SEG = { cyl: ['s'], cylX: ['s'], cylZ: ['s'], torusX: ['rs', 'ts'], torusY: ['rs', 'ts'], lathe: ['seg'], tube: ['n', 'rs'] };
+  for (const [k, args] of Object.entries(SEG)) {
+    const line = g.match(new RegExp(`^  ${k}: \\([^\\n]*`, 'm'));
+    assert.ok(line, `G.${k}`);
+    for (const a of args) assert.ok(line[0].includes(`lodSeg(${a})`), `G.${k}: lodSeg(${a})`);
+  }
   assert.equal((GEO.match(/curveSegments: lodSeg\(seg\)/g) || []).length, 4, 'extrudeX, extrudeY, extrudeZ, extrudeXb');
   assert.doesNotMatch(GEO, /curveSegments: seg\b/);
   // в деталях тела вращения, трубы и выдавливания — через G и extrude*. Не упрощаются только полусферы торцов
