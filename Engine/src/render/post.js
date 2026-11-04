@@ -9,10 +9,12 @@
  * Ошибка в проходах GTAO выключает AO до перезагрузки, кадр рисуется без него (остановка цикла M-03 — только
  * для ошибок самой сцены). Без AO — прежний renderer.render(), буферы AO не создаются. Счётчики renderer.info (engine.stats()), как и раньше,
  * считают основной проход кадра без теней; с AO к ним добавляются четыре полноэкранных прохода GTAO.
+ * M-06a: перед кадром updateShadows() (render/shadows.js) решает, нужна ли новая карта теней.
  */
 import * as THREE from 'three';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { renderer, scene, camera } from './scene.js';
+import { updateShadows } from './shadows.js';
 
 const AO = { radius: 0.5, distanceExponent: 1.3, thickness: 1.4, scale: 1.25, samples: 16, distanceFallOff: 1.0 };
 const DENOISE = { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 };
@@ -38,6 +40,7 @@ function setAO(on) {
 }
 const aoOn = () => rt !== null;
 function renderFrame() {
+  updateShadows(renderer, scene);           // M-06a: карта теней — только если в ней что-то изменилось
   if (!rt) { renderer.render(scene, camera); return; }
   renderer.getDrawingBufferSize(size);
   if (size.x !== rt.width || size.y !== rt.height) { rt.setSize(size.x, size.y); gtao.setSize(size.x, size.y); }
