@@ -169,7 +169,8 @@ test('качество: AO выключается после SLOW_RUN медле
     assert.equal(run, want, `${fps} к/с при ${pr}×`);
   }
   const main = read('../src/main.js');
-  assert.ok(main.includes(`if (perf.fps < ${FPS_LOW} && pr > 1)`), 'порог FPS_LOW — тот же, при котором main.js снижает разрешение');
+  assert.match(main, /^ {4}perf\.ad = adaptPR\(\{ \.\.\.perf\.ad, pr: pixelRatio \}, perf\.fps, MAX_PR\);.*\n {4}const pr = perf\.ad\.pr;$/m, 'разрешение снижает adaptPR() (M-06b)');
+  assert.ok(read('../src/render/quality.js').includes('if (fps < FPS_LOW && pr > 1) {'), 'порог FPS_LOW — тот же, при котором adaptPR() снижает разрешение');
   assert.match(main, /^ {4}perf\.slow = aoOn\(\) \? slowRun\(perf\.slow, perf\.fps, pixelRatio\) : 0;.*\n {4}if \(perf\.slow >= SLOW_RUN\) setAO\(false\);$/m);
   assert.match(main, /^const perf = \{[^\n]*adaptive: !params\.has\('noadapt'\) \};$/m, '?noadapt выключает и адаптивное разрешение, и сброс AO');
 });

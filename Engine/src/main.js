@@ -16,6 +16,7 @@
  * качества «высокое» (src/render/quality.js) или прежним renderer.render(); адаптивное разрешение выключает AO,
  * если кадр медленный и при pixelRatio 1.
  * M-07c: уровень детализации «низкий» (lowDetail из src/render/quality.js) выбирается до buildEngine(); на нём нет AO.
+ * M-06b: шаг адаптивного разрешения — adaptPR() из src/render/quality.js, с гистерезисом против качания уровней.
  */
 /* ============================================================================
  * ЧЕТЫРЁХТАКТНЫЙ ДВИГАТЕЛЬ — интерактивная 3D-разборка (рядная «четвёрка», DOHC 16V)
@@ -44,7 +45,7 @@ import { nodes, nodesList, buildEngine } from './render/parts/nodes.js';
 import { sim, cycDeg, phaseOf, updateKinematics } from './render/kinematics.js';
 import { buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
 import { setAO, aoOn, renderFrame, disposePost } from './render/post.js';
-import { SLOW_RUN, wantAO, lowDetail, slowRun } from './render/quality.js';
+import { SLOW_RUN, wantAO, lowDetail, slowRun, ADAPT0, adaptPR } from './render/quality.js';
 import { ui, effSpeed, pickables, el } from './ui/state.js';
 import { meanProgress, applyExplode, smoothExplode } from './ui/explode.js';
 import { animateExplode, gotoStep } from './ui/steps.js';
@@ -104,7 +105,7 @@ setEffectsSource(ui, effSpeed);             // M-02b: эффекты такто�
 /* ----------------------------------------------------------------------------
  * 11. ЦИКЛ РЕНДЕРА
  * ------------------------------------------------------------------------- */
-const perf = { frames: 0, t0: performance.now(), fps: 60, good: 0, slow: 0, adaptive: !params.has('noadapt') };
+const perf = { frames: 0, t0: performance.now(), fps: 60, ad: ADAPT0, slow: 0, adaptive: !params.has('noadapt') };
 let lastTheta = 0;
 function adapt() {
   perf.frames++;
@@ -113,10 +114,8 @@ function adapt() {
   perf.fps = perf.frames / el_;
   perf.frames = 0; perf.t0 = now;
   if (perf.adaptive && !document.hidden) {
-    let pr = pixelRatio;
-    if (perf.fps < 46 && pr > 1) { pr = Math.max(1, pr - 0.25); perf.good = 0; }
-    else if (perf.fps > 58) { if (++perf.good >= 4 && pr < MAX_PR) { pr = Math.min(MAX_PR, pr + 0.25); perf.good = 0; } }
-    else perf.good = 0;
+    perf.ad = adaptPR({ ...perf.ad, pr: pixelRatio }, perf.fps, MAX_PR);   // M-06b: с гистерезисом (render/quality.js)
+    const pr = perf.ad.pr;
     perf.slow = aoOn() ? slowRun(perf.slow, perf.fps, pixelRatio) : 0;   // M-07a: медленно и при 1× — AO выключается
     if (perf.slow >= SLOW_RUN) setAO(false);
     if (pr !== pixelRatio) {
