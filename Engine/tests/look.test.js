@@ -10,7 +10,8 @@
  * 3) render/quality.js — чистый модуль: AO по умолчанию на компьютере с WebGL2, ?ao и ?noao, без WebGL2 — никогда;
  *    адаптивное разрешение выключает AO после SLOW_RUN медленных измерений подряд при pixelRatio не выше 1.
  * 4) Статически: кадр и снимок экрана рисует renderFrame() из render/post.js, больше renderer.render() нигде нет;
- *    ошибка в проходах GTAO выключает AO, кадр дорисовывается без него;
+ *    ошибка в проходах GTAO выключает AO, кадр дорисовывается без него; буфер кадра для AO настроен так, чтобы цвета
+ *    совпадали с экраном; makeHousing() сохраняет вставку фактуры;
  *    уровень качества задаёт setAO() сразу после initScene(), disposePost() — в dispose() до renderer.dispose().
  * Без сторонних зависимостей.
  */
@@ -135,6 +136,13 @@ test('свет: студийное окружение и источники ум
   assert.equal((studio.match(/^ {4}box\(/gm) || []).length, 8, 'стены, пол и шесть световых панелей');
 });
 
+test('makeHousing(): прежние onBeforeCompile и ключ программы сохраняются — фактура корпусов не пропадает', () => {
+  const body = MATS.slice(MATS.indexOf('function makeHousing('), MATS.indexOf('\n}\n', MATS.indexOf('function makeHousing(')));
+  assert.match(body, /\n  const prev = m\.onBeforeCompile, prevKey = m\.customProgramCacheKey;/);
+  assert.match(body, /\n  m\.onBeforeCompile = \(sh, r\) => \{\n    prev\.call\(m, sh, r\);\n/, 'сначала прежняя вставка, потом штриховка');
+  assert.match(body, /\n  m\.customProgramCacheKey = \(\) => 'housing-cap\|' \+ prevKey\.call\(m\);$/);
+});
+
 test('nodeMat(): фактура подключается к клону материала узла до makeHousing()', () => {
   const geo = read('../src/render/parts/geometry.js');
   const body = geo.slice(geo.indexOf('function nodeMat('), geo.indexOf('\n}\n', geo.indexOf('function nodeMat(')));
@@ -177,4 +185,13 @@ test('кадр и снимок экрана рисует renderFrame(); renderer
   assert.match(fn(post, 'renderFrame'), /^function renderFrame\(\) \{\n  if \(!rt\) \{ renderer\.render\(scene, camera\); return; \}/, 'без AO — прежний renderer.render()');
   assert.match(fn(post, 'renderFrame'), /try \{ gtao\.render\(renderer, null, rt\); \} catch \(err\) \{ failed = err; \}[^\n]*\n  if \(failed\) \{[^\n]*\n[^\n]*\n    disposePost\(\);\n    renderer\.render\(scene, camera\);\n  \}\n?$/,
     'ошибка в проходах GTAO выключает AO, кадр дорисовывается без него');
+});
+
+test('AO: кадр в буфер — с той же тональной компрессией и sRGB, что на экране; туман подменяется на время прохода', () => {
+  const post = read('../src/render/post.js');
+  for (const l of ["rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });",
+    'rt.texture.colorSpace = THREE.SRGBColorSpace;', 'rt.isXRRenderTarget = true;', 'gtao.setGBuffer(rt.depthTexture);', 'gtao.renderToScreen = true;',
+    'fog.color.setRGB(srgb.r, srgb.g, srgb.b, THREE.LinearSRGBColorSpace);', 'finally { renderer.setRenderTarget(null); if (fog) fog.color.copy(fogColor); }'])
+    assert.ok(post.includes(l), l);
+  assert.doesNotMatch(post.replace(/\/\*[\s\S]*?\*\//g, ''), /OutputPass|EffectComposer/, 'OutputPass тонирует весь кадр и сдвигает цвета фона и штриховки');
 });
