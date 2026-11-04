@@ -12,7 +12,7 @@
  *   4) Тело модуля — строки main.js@ac34ff3 из таблицы RENDER, подряд и без правок: sha256 тела равен sha256 этих строк.
  *      Проверка вручную: git show ac34ff3:Engine/src/main.js | sed -n '46,69p' | sha256sum. Кроме тела, в модуле
  *      только комментарий-шапка, импорты, строки связки из таблицы WIRING_B и одна строка export { … } в конце.
- *      Объявлений из тела в main.js больше нет.
+ *      Объявлений из тела в main.js больше нет: ни тех же строк, ни тех же имён верхнего уровня.
  * M-02c — раздел 10, интерфейс (src/ui/): то же правило 4 с опорой main.js@a463fb8, последний коммит до M-02c, —
  *      таблица UI, строки связки — WIRING_C. В main.js остаются корень композиции: связка модулей, цикл рендера
  *      и адаптивное разрешение (раздел 11), потеря контекста и dispose() (M-03), запуск и window.engine.
@@ -144,6 +144,8 @@ for (const [base, table, wires] of MOVES) for (const [file, [lines, hash]] of Ob
     for (const n of exp[1].split(', ')) assert.ok(own.has(n), `${file}: export ${n} — не объявлен в модуле`);
     const main = new Set(MAIN.split('\n'));
     for (const l of body.split('\n')) if (/^(?:const|let|var|function|class) /.test(l)) assert.ok(!main.has(l), `main.js всё ещё содержит «${l}»`);
+    const mainTop = new Set(topNames(code(MAIN)));
+    for (const n of topNames(code(body))) assert.ok(!mainTop.has(n), `main.js снова объявляет ${n} (из ${file})`);
   });
 }
 
