@@ -4,11 +4,13 @@
  * M-02c: подраздел «step UI / sliders» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
  * Кроме updateStepUI() — она в ui/steps.js.
+ * M-07a: снимок экрана рисуется через renderFrame() (render/post.js) — с тем же AO, что на экране.
  */
 import { DEG } from '../config/engine-spec.js';
 import { audio } from '../audio/engine-audio.js';
 import { BASE_RPM } from '../render/world.js';
-import { renderer, scene, camera } from '../render/scene.js';
+import { renderer } from '../render/scene.js';
+import { renderFrame } from '../render/post.js';
 import { sim } from '../render/kinematics.js';
 import { ui, effSpeed, el } from './state.js';
 import { meanProgress } from './explode.js';
@@ -64,7 +66,7 @@ function layoutPanels() {
 }
 function setToggle(btn, on) { btn.classList.toggle('act', on); }
 function screenshot() {
-  renderer.render(scene, camera);
+  renderFrame();
   const url = renderer.domElement.toDataURL('image/png');
   const a = document.createElement('a');
   const d = new Date(), z = n => String(n).padStart(2, '0');

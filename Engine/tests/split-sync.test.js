@@ -96,6 +96,7 @@ const CHANGED = {
   'render/scene.js': 'M-07a',
   'render/materials.js': 'M-07a',
   'render/parts/geometry.js': 'M-07a',
+  'ui/controls.js': 'M-07a',
 };
 const cut = (s, a, b) => {
   const i = s.indexOf(a); assert.ok(i >= 0, `нет «${a}»`); assert.equal(s.indexOf(a, i + 1), -1, `«${a}» встречается дважды`);
