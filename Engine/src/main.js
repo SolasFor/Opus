@@ -10,6 +10,8 @@
  * src/config/parts.js, src/config/steps.js и src/audio/engine-audio.js; дословность проверяет tests/split-sync.test.js.
  * M-02b: разделы 1 и 4–8 (константы сцены, сцена, материалы, детали, кинематика, эффекты тактов) перенесены дословно
  * в src/render/; дословность проверяет tests/split-sync.test.js. cycDeg и phaseOf теперь в src/render/kinematics.js.
+ * M-02c: раздел 10 (интерфейс) перенесён дословно в src/ui/; дословность проверяет tests/split-sync.test.js. В main.js —
+ * корень композиции: связка модулей, цикл рендера и адаптивное разрешение, потеря контекста и dispose(), запуск.
  */
 /* ============================================================================
  * ЧЕТЫРЁХТАКТНЫЙ ДВИГАТЕЛЬ — интерактивная 3D-разборка (рядная «четвёрка», DOHC 16V)
@@ -32,24 +34,24 @@ import { clamp, mod } from './sim/math.js';
 import { pressureAt } from './sim/thermo.js';
 import { tweens, updateTweens } from './anim/tween.js';
 import { audio, setSpeedSource } from './audio/engine-audio.js';
-import { BASE_RPM, CAM_HOME, TGT_HOME, $ } from './render/world.js';
+import { BASE_RPM, CAM_HOME, TGT_HOME } from './render/world.js';
 import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, initScene, envRoom, envTarget, makeEnvironment, setLifecycle, storePixelRatio } from './render/scene.js';
 import { nodes, nodesList, buildEngine } from './render/parts/nodes.js';
 import { sim, cycDeg, phaseOf, updateKinematics } from './render/kinematics.js';
-import { inPts, exPts, buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
+import { buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
 import { ui, effSpeed, pickables, el } from './ui/state.js';
-import { meanProgress, applyExplode, smoothExplode, boundsWith } from './ui/explode.js';
-import { exitStepMode, animateExplode, gotoStep, nextStep, prevStep, updateStepUI } from './ui/steps.js';
-import { tweenCamera, frameBox, cameraPreset, resetView, focusOn } from './ui/camera.js';
-import { setView, cycleView, setCut } from './ui/view.js';
+import { meanProgress, applyExplode, smoothExplode } from './ui/explode.js';
+import { animateExplode, gotoStep } from './ui/steps.js';
+import { tweenCamera, cameraPreset } from './ui/camera.js';
+import { setView } from './ui/view.js';
 import { pick, select, isolate, setHover } from './ui/selection.js';
 import { updateLive } from './ui/info.js';
-import { setupCharts } from './ui/charts/canvas.js';
-import { TL, drawTiming } from './ui/charts/timing.js';
+import { drawTiming } from './ui/charts/timing.js';
 import { drawPV } from './ui/charts/pv.js';
-import { buildLabels, updateLabels } from './ui/labels.js';
+import { updateLabels } from './ui/labels.js';
 import { updateMaterials } from './ui/highlight.js';
-import { setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, togglePanels, setPanel, layoutPanels, setToggle, screenshot } from './ui/controls.js';
+import { setRange, setRunning, toggleRun, toast } from './ui/controls.js';
+import { initUI, onResize, setInputLifecycle } from './ui/input.js';
 
 /* ----------------------------------------------------------------------------
  * 1. КОНСТАНТЫ — мировые единицы: 1 ед. = 100 мм (соглашение модели) → src/render/world.js (M-02b)
@@ -92,203 +94,6 @@ import { setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, togg
  * ------------------------------------------------------------------------- */
 setSpeedSource(effSpeed);                   // M-02a: audio.fire() берёт текущую скорость отсюда
 setEffectsSource(ui, effSpeed);             // M-02b: эффекты тактов читают ui.isolated, ui.view и effSpeed()
-
-function initUI() {
-  ['explodeSlider', 'explodeVal', 'btnAssemble', 'btnExplode', 'stepDots', 'stepCount', 'stepTitle', 'stepNote', 'btnPrev', 'btnNext',
-   'viewVal', 'cutRow', 'cutSlider', 'cutVal', 'btnLabels', 'btnRotate', 'btnSound', 'btnShot', 'partChips', 'partCount',
-   'hud', 'hudHide', 'hudOpen', 'cycle', 'cycleHide', 'cycleOpen', 'fps', 'btnRun', 'btnSlow', 'speedSlider', 'speedVal',
-   'angleSlider', 'angleVal', 'btnDegBack', 'btnDegFwd', 'timing', 'pv', 'pvTitle', 'pvVal', 'pvWrap',
-   'infocard', 'infoClose', 'infoTag', 'infoTitle', 'infoDesc', 'infoSpecs', 'infoLive', 'btnFocus', 'btnIsolate',
-   'isoBar', 'isoName', 'btnUnIso', 'toast', 'flash', 'help', 'helpClose', 'helpLink', 'labels', 'tooltip'].forEach(id => { el[id] = $(id); });
-  el.canvas = renderer.domElement;
-  el.fireChips = Array.from(document.querySelectorAll('.fire .c'));
-
-  // buttons never keep focus (so Space never double-triggers a focused button)
-  document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); }, { signal: life.signal });
-
-  el.explodeSlider.addEventListener('input', () => {
-    exitStepMode();
-    if (ui.explodeTw) { ui.explodeTw.kill(); ui.explodeTw = null; }
-    ui.explode = el.explodeSlider.value / 100;
-  });
-  el.explodeSlider.addEventListener('change', () => el.explodeSlider.blur());
-  el.btnAssemble.addEventListener('click', () => { animateExplode(0); frameBox(boundsWith(0), 1.2, 0.15); });
-  el.btnExplode.addEventListener('click', () => { animateExplode(1); frameBox(boundsWith(1), 1.35, 0.25); });
-  el.btnPrev.addEventListener('click', prevStep);
-  el.btnNext.addEventListener('click', nextStep);
-
-  document.querySelectorAll('#viewSeg button').forEach(b => b.addEventListener('click', () => setView(b.dataset.mode)));
-  el.cutSlider.addEventListener('input', () => setCut(+el.cutSlider.value));
-  el.cutSlider.addEventListener('change', () => el.cutSlider.blur());
-  setCut(+el.cutSlider.value);
-  document.querySelectorAll('#camRow .btn').forEach(b => b.addEventListener('click', () => cameraPreset(b.dataset.cam)));
-  el.btnLabels.addEventListener('click', () => { ui.labels = !ui.labels; setToggle(el.btnLabels, ui.labels); });
-  el.btnRotate.addEventListener('click', () => { ui.autoRotate = !ui.autoRotate; setToggle(el.btnRotate, ui.autoRotate); ui.lastInteract = 0; });
-  el.btnSound.addEventListener('click', toggleSound);
-  el.btnShot.addEventListener('click', screenshot);
-
-  // chips
-  nodesList.forEach(n => {
-    const c = document.createElement('button');
-    c.className = 'chip';
-    c.textContent = n.userData.info.short;
-    c.title = n.userData.info.name;
-    c.addEventListener('click', () => select(ui.selected === n ? null : n));
-    c.addEventListener('dblclick', () => isolate(n));
-    el.partChips.appendChild(c);
-    (el.chips = el.chips || {})[n.userData.key] = c;
-  });
-  el.partCount.textContent = nodesList.length + ' узлов';
-
-  // panels
-  el.hudHide.addEventListener('click', () => setPanel(el.hud, el.hudOpen, true));
-  el.hudOpen.addEventListener('click', () => setPanel(el.hud, el.hudOpen, false));
-  el.cycleHide.addEventListener('click', () => setPanel(el.cycle, el.cycleOpen, true));
-  el.cycleOpen.addEventListener('click', () => setPanel(el.cycle, el.cycleOpen, false));
-  el.helpLink.addEventListener('click', () => el.help.classList.add('on'));
-  el.helpClose.addEventListener('click', () => el.help.classList.remove('on'));
-
-  // engine controls
-  el.btnRun.addEventListener('click', toggleRun);
-  el.btnSlow.addEventListener('click', () => { sim.slow = !sim.slow; setToggle(el.btnSlow, sim.slow); updateSpeedUI(); });
-  el.speedSlider.addEventListener('input', updateSpeedUI);
-  el.speedSlider.addEventListener('change', () => el.speedSlider.blur());
-  updateSpeedUI();
-  const startScrub = () => { if (ui.scrubbing) return; ui.scrubbing = true; ui.wasRunning = sim.running; if (sim.running) setRunning(false); };
-  const endScrub = () => { if (!ui.scrubbing) return; ui.scrubbing = false; if (ui.wasRunning) setRunning(true); el.angleSlider.blur(); };
-  el.angleSlider.addEventListener('pointerdown', startScrub);
-  el.angleSlider.addEventListener('input', () => {
-    if (!ui.scrubbing) { startScrub(); ui.scrubbing = 'key'; }
-    const base = Math.floor(sim.theta / DEG / 720) * 720;
-    sim.theta = (base + +el.angleSlider.value) * DEG;
-  });
-  el.angleSlider.addEventListener('change', endScrub);
-  window.addEventListener('pointerup', endScrub, { signal: life.signal });
-  const holdRepeat = (btn, sign) => {
-    let t1 = 0, t2 = 0;
-    const stop = () => { clearTimeout(t1); clearInterval(t2); };
-    btn.addEventListener('pointerdown', e => {
-      const step = (e.shiftKey ? 1 : 5) * sign;
-      nudgeCrank(step);
-      stop();
-      t1 = setTimeout(() => { t2 = setInterval(() => nudgeCrank(step), 45); }, 320);
-    });
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
-  };
-  holdRepeat(el.btnDegBack, -1);
-  holdRepeat(el.btnDegFwd, 1);
-  el.timing.addEventListener('click', e => {
-    const r = el.timing.getBoundingClientRect();
-    const i = Math.floor((e.clientY - r.top - TL.top) / TL.row);
-    if (i >= 0 && i < 4) setPvCyl(i);
-  });
-  el.fireChips.forEach(c => c.addEventListener('click', () => setPvCyl(+c.dataset.c)));
-
-  // info card
-  el.infoClose.addEventListener('click', () => select(null, false));
-  el.btnFocus.addEventListener('click', () => ui.selected && focusOn(ui.selected));
-  el.btnIsolate.addEventListener('click', () => isolate(ui.isolated === ui.selected ? null : ui.selected));
-  el.btnUnIso.addEventListener('click', () => isolate(null));
-
-  // pointer: hover, click vs drag, double-click isolate
-  const cv = el.canvas;
-  const setPtr = e => {
-    const r = cv.getBoundingClientRect();
-    ui.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    ui.pointerPx.x = e.clientX; ui.pointerPx.y = e.clientY;
-  };
-  cv.addEventListener('pointermove', e => {
-    setPtr(e);
-    el.tooltip.style.left = e.clientX + 'px'; el.tooltip.style.top = e.clientY + 'px';
-    if (ui.down && Math.hypot(e.clientX - ui.down.x, e.clientY - ui.down.y) > 5) ui.dragging = true;
-    ui.needHover = !ui.dragging;
-    if (ui.dragging) setHover(null);
-  });
-  cv.addEventListener('pointerleave', () => { ui.needHover = false; setHover(null); });
-  cv.addEventListener('pointerdown', e => {
-    ui.down = { x: e.clientX, y: e.clientY, t: performance.now(), button: e.button };
-    ui.dragging = false;
-    ui.lastInteract = performance.now();
-    cv.focus({ preventScroll: true });
-  });
-  cv.addEventListener('pointerup', e => {
-    const d = ui.down; ui.down = null;
-    if (!d || d.button !== 0) return;
-    const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y);
-    if (moved > 5 || performance.now() - d.t > 600) { ui.dragging = false; return; }
-    setPtr(e);
-    const n = pick();
-    if (n !== ui.selected || !n) select(n);
-  });
-  cv.addEventListener('dblclick', e => {
-    setPtr(e);
-    const n = pick();
-    if (n) isolate(n); else if (ui.isolated) isolate(null);
-  });
-  controls.addEventListener('start', () => { if (ui.camTw) { ui.camTw.kill(); ui.camTw = null; } ui.lastInteract = performance.now(); });
-  cv.addEventListener('wheel', () => { if (ui.camTw) { ui.camTw.kill(); ui.camTw = null; } ui.lastInteract = performance.now(); }, { passive: true });
-
-  window.addEventListener('keydown', onKey, { signal: life.signal });
-  window.addEventListener('resize', onResize, { signal: life.signal });
-  updateStepUI();
-  buildLabels();
-  setupCharts();
-}
-function setPvCyl(i) {
-  ui.pvCyl = i;
-  el.pvTitle.textContent = 'p–V диаграмма · цилиндр ' + (i + 1);
-  updateLive(true);
-}
-function toggleSound() {
-  const want = !audio.on;
-  if (!audio.setOn(want)) { toast('Браузер не поддерживает WebAudio'); return; }
-  setToggle(el.btnSound, want);
-  if (want) toast(sim.running ? 'Звук включён: каждый «хлопок» — рабочий ход' : 'Звук включён — запустите двигатель (Space)');
-}
-function onKey(e) {
-  const tag = e.target && e.target.tagName;
-  if (tag === 'INPUT' && /^Arrow/.test(e.key)) return;     // let a focused slider use the arrows
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const k = e.key;
-  ui.lastInteract = performance.now();
-  if (k === ' ') { toggleRun(); e.preventDefault(); }
-  else if (k === 'ArrowRight') { nextStep(); e.preventDefault(); }
-  else if (k === 'ArrowLeft') { prevStep(); e.preventDefault(); }
-  else if (k === ',' || k === '<' || k === 'б' || k === 'Б') nudgeCrank(e.shiftKey ? -1 : -5);
-  else if (k === '.' || k === '>' || k === 'ю' || k === 'Ю') nudgeCrank(e.shiftKey ? 1 : 5);
-  else if (k === '+' || k === '=') { el.speedSlider.value = Math.min(100, +el.speedSlider.value + 5); updateSpeedUI(); }
-  else if (k === '-' || k === '_') { el.speedSlider.value = Math.max(0, +el.speedSlider.value - 5); updateSpeedUI(); }
-  else if (k === 'Escape') {
-    if (el.help.classList.contains('on')) el.help.classList.remove('on');
-    else if (ui.isolated) isolate(null);
-    else if (ui.selected) select(null, false);
-  }
-  else if (k === '?') el.help.classList.toggle('on');
-  else if (/^[1-4]$/.test(k)) cameraPreset(['front', 'side', 'top', 'iso'][+k - 1]);
-  else {
-    const code = e.code;   // layout-independent (works with the Russian layout too)
-    if (code === 'KeyR') resetView();
-    else if (code === 'KeyE') { if (meanProgress() > 0.5) el.btnAssemble.click(); else el.btnExplode.click(); }
-    else if (code === 'KeyX') cycleView();
-    else if (code === 'KeyL') el.btnLabels.click();
-    else if (code === 'KeyA') el.btnRotate.click();
-    else if (code === 'KeyM') toggleSound();
-    else if (code === 'KeyS') el.btnSlow.click();
-    else if (code === 'KeyP') screenshot();
-    else if (code === 'KeyH') togglePanels();
-    else if (code === 'KeyF') { if (ui.selected) focusOn(ui.selected); }
-    else if (code === 'KeyI') { if (ui.selected) isolate(ui.isolated === ui.selected ? null : ui.selected); }
-    else if (code === 'Slash' && e.shiftKey) el.help.classList.toggle('on');
-  }
-}
-function onResize() {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  [inPts, exPts].forEach(P => { P.points.material.uniforms.uScale.value = innerHeight * pixelRatio * 0.5; });
-  setupCharts();
-  layoutPanels();
-}
 
 /* ----------------------------------------------------------------------------
  * 11. ЦИКЛ РЕНДЕРА
@@ -371,6 +176,7 @@ function loop() {
 const run = { raf: 0, stopped: false, disposed: false, lost: false, errors: 0, timer: 0 };
 const life = new AbortController();         // снимает слушатели window/document в dispose()
 setLifecycle(life, onContextLost, onContextRestored);   // M-02b: initScene() из render/scene.js вешает их с life.signal
+setInputLifecycle(life);                    // M-02c: initUI() из ui/input.js вешает слушатели window/document с life.signal
 function stopLoop() { run.stopped = true; cancelAnimationFrame(run.raf); }
 function onContextLost() {
   if (run.stopped) return;                  // после остановки сообщение об ошибке остаётся на экране

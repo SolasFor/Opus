@@ -82,8 +82,10 @@ const UI = {
   'ui/labels.js': ['399,428p', '0a458997666772884e622ddd400469ee045b2cecd13fb832b1318ba7e6061d09'],
   'ui/highlight.js': ['430,460p', '276f6e50b1fdfc8244adee2f5eac98c06ece846918cdb485592135ebfcb1b281'],
   'ui/controls.js': ['462,463p;486,544p', 'b1b77ede7d7dc063856506ad727d3222771bbeb9f9896d0144aba85e3e4a4b0b'],
+  'ui/input.js': ['546,741p', 'aa75bac4cd183f72f1831794367a6724fa327c5efd7faef2cbdbb27b928fa5de'],
 };
 const WIRING_C = {
+  'ui/input.js': ['let life;\nconst setInputLifecycle = ctl => { life = ctl; };\n', [/^setLifecycle\(life, onContextLost, onContextRestored\);.*\nsetInputLifecycle\(life\);/m]],
 };
 const MOVES = [['ac34ff3', RENDER, WIRING_B], ['a463fb8', UI, WIRING_C]];
 const cut = (s, a, b) => {
