@@ -43,6 +43,9 @@ test('ВМТ и НМТ: поршень цилиндра в верхней и н�
     const marks = deadCentres(i);
     assert.deepEqual(marks.map(m => m.deg), [...marks.map(m => m.deg)].sort((a, b) => a - b));
     assert.ok(marks.length >= 4 && marks.every(m => m.deg >= 0 && m.deg <= 720));
+    // FIRE_DEG кратны 180°: границы тактов на 0, 180, 360, 540 и 720° — шкала закрыта с обеих сторон
+    assert.deepEqual(marks.map(m => m.deg), [0, 180, 360, 540, 720], `Ц${i + 1}`);
+    assert.equal(marks[0].name, marks[4].name, `Ц${i + 1}: 0° и 720° — одна и та же мёртвая точка`);
     for (const m of marks) {
       const y = pistonPinY(cylinderPhaseDeg(m.deg * DEG, i));
       assert.ok(near(y, m.name === 'ВМТ' ? PIN_TDC : PIN_BDC, 1e-6), `Ц${i + 1}, ${m.deg}° — ${m.name}: y = ${y}`);
