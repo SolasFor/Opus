@@ -32,15 +32,15 @@
  * 10. Интерфейс: разборка, шаги, вид/разрез, камера, подписи, карточки, диаграммы
  * 11. Цикл рендера, адаптивное разрешение, запуск
  * ========================================================================== */
-import { DEG, SPARK_ADV } from './config/engine-spec.js';
-import { clamp, mod } from './sim/math.js';
+import { DEG } from './config/engine-spec.js';
+import { clamp } from './sim/math.js';
 import { pressureAt } from './sim/thermo.js';
 import { tweens, updateTweens } from './anim/tween.js';
 import { audio, setSpeedSource } from './audio/engine-audio.js';
 import { BASE_RPM, CAM_HOME, TGT_HOME } from './render/world.js';
 import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, initScene, envRoom, envTarget, makeEnvironment, setLifecycle, storePixelRatio } from './render/scene.js';
 import { nodes, nodesList, buildEngine } from './render/parts/nodes.js';
-import { sim, cycDeg, phaseOf, updateKinematics } from './render/kinematics.js';
+import { sim, phaseOf, updateKinematics } from './render/kinematics.js';
 import { buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
 import { setAO, aoOn, renderFrame, disposePost } from './render/post.js';
 import { SLOW_RUN, wantAO, slowRun } from './render/quality.js';
@@ -50,12 +50,10 @@ import { animateExplode, gotoStep } from './ui/steps.js';
 import { tweenCamera, cameraPreset } from './ui/camera.js';
 import { setView } from './ui/view.js';
 import { pick, select, isolate, setHover } from './ui/selection.js';
-import { updateLive } from './ui/info.js';
-import { drawTiming } from './ui/charts/timing.js';
-import { drawPV } from './ui/charts/pv.js';
 import { updateLabels } from './ui/labels.js';
 import { updateMaterials } from './ui/highlight.js';
-import { setRange, setRunning, toggleRun, toast } from './ui/controls.js';
+import { setRunning, toggleRun, toast } from './ui/controls.js';
+import { updateHud } from './ui/hud.js';
 import { initUI, onResize, setInputLifecycle } from './ui/input.js';
 
 /* ----------------------------------------------------------------------------
@@ -142,17 +140,7 @@ function frame(dt) {
   controls.autoRotate = ui.autoRotate && !ui.camTw && performance.now() - ui.lastInteract > 2500;
   controls.update();
 
-  // HUD
-  const cd = cycDeg();
-  if (!ui.scrubbing) setRange(el.angleSlider, Math.round(cd), cd / 7.2);
-  else el.angleSlider.style.setProperty('--p', (+el.angleSlider.value / 7.2) + '%');
-  el.angleVal.textContent = `${Math.round(mod(sim.theta / DEG, 360))}° · цикл ${Math.round(cd)}°`;
-  const mp = meanProgress(), pct = Math.round(mp * 100);
-  if (document.activeElement !== el.explodeSlider || ui.stepMode) setRange(el.explodeSlider, pct, pct);
-  el.explodeVal.textContent = pct + '%';
-  for (const c of el.fireChips) { const phi = phaseOf(+c.dataset.c); c.classList.toggle('hot', phi < 90 || phi > 720 - SPARK_ADV); }
-  if (!el.cycle.classList.contains('hid')) { drawTiming(); if (!el.cycle.classList.contains('compact') && innerWidth > 760) drawPV(); }
-  updateLive(false);
+  updateHud();                              // M-05b: показания панелей → src/ui/hud.js
   updateLabels();
 
   renderFrame();                            // M-07a: с AO или прежний renderer.render()
