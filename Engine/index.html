@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Четырёхтактный двигатель · интерактивная 3D-разборка</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='7' fill='%2313233a' stroke='%234da3ff' stroke-width='2'/%3E%3Ctext x='16' y='22.5' text-anchor='middle' font-family='system-ui,sans-serif' font-size='16' font-weight='800' fill='%23e2f1ff'%3E4%D0%A2%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="./styles/tokens.css" />
-<link rel="stylesheet" href="./styles/app.css" />
+<link rel="stylesheet" href="./styles/tokens.css" onerror="window.__engStyleError ? __engStyleError() : (window.__engStyleFailed = true)" />
+<link rel="stylesheet" href="./styles/app.css" onerror="window.__engStyleError ? __engStyleError() : (window.__engStyleFailed = true)" />
 </head>
 <body>
 
@@ -177,6 +177,8 @@
     var APP = 'Не загрузились файлы приложения, хотя CDN (unpkg.com) доступен. Нажмите «Повторить». Если ошибка не исчезнет, откройте однофайловую версию.';
     var FILE = 'Эта версия работает только через веб-сервер: файл открыт с диска, и браузер не загружает её модули. ' +
       'Без сервера откройте однофайловую версию Engine.html или запустите сервер в корне репозитория: <code>python3 -m http.server</code>.';
+    var STYLE = 'Не загрузились файлы оформления приложения (<code>styles/</code>). Проверьте подключение к интернету и нажмите «Повторить». ' +
+      'Если ошибка не исчезнет, откройте однофайловую версию.';
     var root = document.documentElement, timer = 0;
     var esc = window.__engEsc = function (s) {
       return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
@@ -215,6 +217,16 @@
       setTimeout(cdn, 8000);
       fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }).then(function () { fail(APP, ['retry', 'legacy']); }, cdn);
     };
+    /* M-05a: не загрузился файл стилей (onerror у <link> в <head>; он может сработать и до этого скрипта — тогда флаг
+       __engStyleFailed). Без стилей страница непригодна: экран ошибки получает свои встроенные стили, а main.js не собирает
+       сцену, раз запуск уже не удался (__engFailed) */
+    window.__engStyleError = function () {
+      if (window.__engOk || window.__engFailed) return;
+      document.getElementById('loader').style.cssText = 'position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;gap:18px;' +
+        'align-items:center;justify-content:center;padding:24px;text-align:center;background:#0f1115;color:#e8edf5;font:14px/1.6 system-ui,sans-serif;color-scheme:dark';
+      document.getElementById('loaderAct').style.cssText = 'display:flex;gap:12px;align-items:center';
+      fail(STYLE, ['retry', 'legacy']);
+    };
     window.addEventListener('error', function (e) {
       if (e && e.message) fail('Ошибка при запуске: ' + esc(e.message), ['reload']);
     });
@@ -223,6 +235,7 @@
         'отвечает с задержкой. Можно подождать или обновить страницу.', ['refresh']);
     }, 15000);
     root.setAttribute('data-boot', 'booting');
+    if (window.__engStyleFailed) window.__engStyleError();
   })();
 </script>
 <script type="importmap">

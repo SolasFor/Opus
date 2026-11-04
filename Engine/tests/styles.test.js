@@ -1,7 +1,7 @@
 /**
  * M-05a: стили модульной версии вынесены из встроенного <style> Engine/index.html в Engine/styles/ (П-1, 14_M05).
  *   1) В index.html нет <style>. В <head> подключены styles/tokens.css и затем styles/app.css, до встроенного скрипта
- *      экрана запуска.
+ *      экрана запуска; если файл стилей не загрузился, onerror сообщает об этом экрану запуска (boot.test.js).
  *   2) app.css — встроенный <style> из index.html@17c9834 (строки 8–222 без отступа в 2 пробела) плюс правки
  *      из таблицы EDITS. Если в app.css вернуть каждую правку назад (новый текст → старый) и снять шапку-комментарий,
  *      sha256 совпадёт с BASE. Проверка вручную:
@@ -28,6 +28,8 @@ const SRC = new URL('../src/', import.meta.url);
 const walk = d => readdirSync(new URL(d, SRC), { withFileTypes: true })
   .flatMap(e => e.isDirectory() ? walk(`${d}${e.name}/`) : e.name.endsWith('.js') ? [d + e.name] : []);
 const HEAD = INDEX.slice(0, INDEX.indexOf('</head>'));
+// ошибка загрузки стилей: экран ошибки (boot.test.js); обработчик может сработать раньше встроенного скрипта — тогда флаг
+const ONERROR = 'window.__engStyleError ? __engStyleError() : (window.__engStyleFailed = true)';
 const BASE = 'fa3e6ca5548882e0ff817bc0f4a4feac8983f6381397103648e8dfdb0e3e45b0';
 // правки после переноса: [старый текст, новый текст, сколько раз встречается, причина — если вид меняется намеренно]
 const EDITS = [
@@ -67,8 +69,9 @@ test('index.html: нет <style>, tokens.css и app.css подключены в 
   assert.doesNotMatch(INDEX, /<style[\s>]/);
   assert.ok(INDEX.indexOf('</head>') > 0 && INDEX.indexOf('</head>') < INDEX.indexOf('<script>'), '<head> до встроенного скрипта');
   assert.equal(count(INDEX, 'rel="stylesheet"'), 2);
-  const t = HEAD.indexOf('<link rel="stylesheet" href="./styles/tokens.css" />'), a = HEAD.indexOf('<link rel="stylesheet" href="./styles/app.css" />');
-  assert.ok(t > 0 && a > t, 'сначала tokens.css, затем app.css');
+  const link = f => `<link rel="stylesheet" href="./styles/${f}" onerror="${ONERROR}" />`;
+  const t = HEAD.indexOf(link('tokens.css')), a = HEAD.indexOf(link('app.css'));
+  assert.ok(t > 0 && a > t, 'сначала tokens.css, затем app.css, у обоих onerror');
 });
 
 test('app.css: перенесённый <style> из index.html@17c9834 плюс правки из EDITS', () => {
