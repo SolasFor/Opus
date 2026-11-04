@@ -10,6 +10,7 @@
  * 3) render/quality.js — чистый модуль: AO по умолчанию на компьютере с WebGL2, ?ao и ?noao, без WebGL2 — никогда;
  *    адаптивное разрешение выключает AO после SLOW_RUN медленных измерений подряд при pixelRatio не выше 1.
  * 4) Статически: кадр и снимок экрана рисует renderFrame() из render/post.js, больше renderer.render() нигде нет;
+ *    ошибка в проходах GTAO выключает AO, кадр дорисовывается без него;
  *    уровень качества задаёт setAO() сразу после initScene(), disposePost() — в dispose() до renderer.dispose().
  * Без сторонних зависимостей.
  */
@@ -174,4 +175,6 @@ test('кадр и снимок экрана рисует renderFrame(); renderer
   assert.ok(dispose.indexOf('disposePost();') > 0 && dispose.indexOf('disposePost();') < dispose.indexOf('renderer.dispose();'), 'disposePost() до renderer.dispose()');
   const post = read('../src/render/post.js');
   assert.match(fn(post, 'renderFrame'), /^function renderFrame\(\) \{\n  if \(!rt\) \{ renderer\.render\(scene, camera\); return; \}/, 'без AO — прежний renderer.render()');
+  assert.match(fn(post, 'renderFrame'), /try \{ gtao\.render\(renderer, null, rt\); \} catch \(err\) \{ failed = err; \}[^\n]*\n  if \(failed\) \{[^\n]*\n[^\n]*\n    disposePost\(\);\n    renderer\.render\(scene, camera\);\n  \}\n?$/,
+    'ошибка в проходах GTAO выключает AO, кадр дорисовывается без него');
 });

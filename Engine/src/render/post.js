@@ -6,7 +6,8 @@
  * GTAO берёт глубину основного прохода (setGBuffer), поэтому разрез и рентген учитываются как в кадре; нормали
  * восстанавливаются по глубине. Цвет тумана three.js передаёт в буфер в линейном пространстве, а на экран —
  * в sRGB: на время прохода в буфер цвет подменяется, чтобы туман совпал.
- * Без AO — прежний renderer.render(), буферы AO не создаются. Счётчики renderer.info (engine.stats()), как и раньше,
+ * Ошибка в проходах GTAO выключает AO до перезагрузки, кадр рисуется без него (остановка цикла M-03 — только
+ * для ошибок самой сцены). Без AO — прежний renderer.render(), буферы AO не создаются. Счётчики renderer.info (engine.stats()), как и раньше,
  * считают основной проход кадра без теней; с AO к ним добавляются четыре полноэкранных прохода GTAO.
  */
 import * as THREE from 'three';
@@ -44,8 +45,14 @@ function renderFrame() {
   if (fog) { fogColor.copy(fog.color); fogColor.getRGB(srgb, THREE.SRGBColorSpace); fog.color.setRGB(srgb.r, srgb.g, srgb.b, THREE.LinearSRGBColorSpace); }
   try { renderer.setRenderTarget(rt); renderer.render(scene, camera); }
   finally { renderer.setRenderTarget(null); if (fog) fog.color.copy(fogColor); }
+  let failed = null;
   renderer.info.autoReset = false;          // проходы GTAO добавляются к счётчикам основного прохода
-  try { gtao.render(renderer, null, rt); } finally { renderer.info.autoReset = true; }
+  try { gtao.render(renderer, null, rt); } catch (err) { failed = err; } finally { renderer.info.autoReset = true; }
+  if (failed) {                             // AO необязателен: при ошибке в его проходах он выключается, кадр рисуется как без AO
+    console.warn('AO выключен из-за ошибки:', failed);
+    disposePost();
+    renderer.render(scene, camera);
+  }
 }
 /* GTAOPass.dispose() в three.js 0.160 не освобождает два своих материала */
 function disposePost() {
