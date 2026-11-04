@@ -16,6 +16,9 @@
  * M-02c — раздел 10, интерфейс (src/ui/): то же правило 4 с опорой main.js@a463fb8, последний коммит до M-02c, —
  *      таблица UI, строки связки — WIRING_C. В main.js остаются корень композиции: связка модулей, цикл рендера
  *      и адаптивное разрешение (раздел 11), потеря контекста и dispose() (M-03), запуск и window.engine.
+ * M-07a и дальше: модули из таблицы CHANGED изменены намеренно, после переноса (модуль → этап). Для них правило 4
+ *      проверяет всё, кроме sha256 тела, и что тело действительно отличается от строк опоры: модуль, который снова
+ *      совпал с опорой, из таблицы нужно убрать.
  * Импорты main.js и вынесенных из него модулей (anim, audio, render, ui):
  *   5) только three, three/addons/….js и пути внутри src/ с .js; main.js никто не импортирует; anim/ и audio/
  *      не импортируют render/ и ui/, render/ не импортирует ui/; циклов нет;
@@ -88,6 +91,10 @@ const WIRING_C = {
   'ui/input.js': ['let life;\nconst setInputLifecycle = ctl => { life = ctl; };\n', [/^setLifecycle\(life, onContextLost, onContextRestored\);.*\nsetInputLifecycle\(life\);/m]],
 };
 const MOVES = [['ac34ff3', RENDER, WIRING_B], ['a463fb8', UI, WIRING_C]];
+// M-07a и дальше: модуль → этап, на котором его тело намеренно изменено после переноса
+const CHANGED = {
+  'render/materials.js': 'M-07a',
+};
 const cut = (s, a, b) => {
   const i = s.indexOf(a); assert.ok(i >= 0, `нет «${a}»`); assert.equal(s.indexOf(a, i + 1), -1, `«${a}» встречается дважды`);
   const j = s.indexOf(b, i); assert.ok(j > i, `нет конца блока «${a}»`); return s.slice(i, j);
@@ -129,7 +136,9 @@ test('модули M-02a ничего не импортируют: ни three, �
 });
 
 for (const [base, table, wires] of MOVES) for (const [file, [lines, hash]] of Object.entries(table)) {
-  test(`${file}: строки main.js@${base} ${lines} перенесены дословно, в main.js их нет`, () => {
+  const changed = CHANGED[file];
+  test(changed ? `${file}: перенесён из строк main.js@${base} ${lines}, изменён в ${changed}; в main.js их нет`
+    : `${file}: строки main.js@${base} ${lines} перенесены дословно, в main.js их нет`, () => {
     const text = read(`../src/${file}`);
     const head = text.match(/^\/\*[\s\S]*?\n \*\/\n(?:import [^\n]*\n)+\n/);
     assert.ok(head, `${file}: в начале комментарий-шапка, импорты и пустая строка`);
@@ -139,7 +148,8 @@ for (const [base, table, wires] of MOVES) for (const [file, [lines, hash]] of Ob
     const exp = rest.match(/\nexport \{ ([\w$]+(?:, [\w$]+)*) \};\n$/);
     assert.ok(exp, `${file}: в конце одна строка export { … }`);
     const body = rest.slice(0, exp.index);
-    assert.equal(sha(body), hash, `${file}: тело отличается от строк ${lines} main.js@${base}`);
+    if (changed) assert.notEqual(sha(body), hash, `${file}: тело совпадает со строками ${lines} main.js@${base} — уберите модуль из CHANGED`);
+    else assert.equal(sha(body), hash, `${file}: тело отличается от строк ${lines} main.js@${base}`);
     const own = new Set(topNames((wiring || '') + body));
     for (const n of exp[1].split(', ')) assert.ok(own.has(n), `${file}: export ${n} — не объявлен в модуле`);
     const main = new Set(MAIN.split('\n'));
@@ -148,6 +158,10 @@ for (const [base, table, wires] of MOVES) for (const [file, [lines, hash]] of Ob
     for (const n of topNames(code(body))) assert.ok(!mainTop.has(n), `main.js снова объявляет ${n} (из ${file})`);
   });
 }
+
+test('CHANGED: только модули из таблиц RENDER и UI', () => {
+  for (const file of Object.keys(CHANGED)) assert.ok(file in RENDER || file in UI, `${file}: нет в RENDER и UI`);
+});
 
 // ---------- импорты main.js и вынесенных модулей ----------
 const SRC = new URL('../src/', import.meta.url);

@@ -1,6 +1,7 @@
 /* Материалы деталей M и корпусные материалы с плоскостью разреза и штриховкой сечения (makeHousing).
  * M-02b: раздел 5 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
  * проверяет tests/split-sync.test.js.
+ * M-07a: makeHousing() дополняет onBeforeCompile и ключ программы, заданные раньше, а не заменяет их.
  */
 import * as THREE from 'three';
 import { cutPlane, CAP } from './scene.js';
@@ -71,7 +72,9 @@ function makeHousing(m) {
   m.clippingPlanes = [cutPlane];
   m.shadowSide = THREE.FrontSide;
   m.userData.housing = true;
-  m.onBeforeCompile = sh => {
+  const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;   // M-07a: вставки до makeHousing() сохраняются
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
     sh.uniforms.uCapOn = CAP.uCapOn;
     sh.uniforms.uCapColor = CAP.uCapColor;
     sh.fragmentShader = 'uniform float uCapOn;\nuniform vec3 uCapColor;\n' + sh.fragmentShader.replace(
@@ -83,7 +86,7 @@ function makeHousing(m) {
          gl_FragColor = vec4(mix(uCapColor, uCapColor * 0.62, h), gl_FragColor.a);
        }`);
   };
-  m.customProgramCacheKey = () => 'housing-cap';
+  m.customProgramCacheKey = () => 'housing-cap|' + prevKey.call(m);
 }
 
 export { M, createMaterials, makeHousing };
