@@ -3,11 +3,13 @@
  * M-02b: из раздела 6 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
  * проверяет tests/split-sync.test.js.
  * Здесь начало раздела 6 и две последние функции блока «nodes».
+ * M-07a: nodeMat() подключает к материалу узла процедурную фактуру (applySurface из render/surface.js).
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3 } from '../world.js';
 import { makeHousing } from '../materials.js';
+import { applySurface } from '../surface.js';
 
 const G = {
   box: (w, h, d) => new THREE.BoxGeometry(w, h, d),
@@ -97,6 +99,7 @@ function nodeMat(node, base) {
   if (!ud.mats.has(base)) {
     const m = base.clone();
     m.userData = { ...base.userData, baseOpacity: base.opacity, baseEmissive: base.emissive.clone() };
+    applySurface(m);                        // M-07a: фактура по m.userData.surf, до makeHousing()
     if (ud.housing) makeHousing(m);
     ud.mats.set(base, m);
   }

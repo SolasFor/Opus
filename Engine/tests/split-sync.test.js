@@ -94,6 +94,7 @@ const MOVES = [['ac34ff3', RENDER, WIRING_B], ['a463fb8', UI, WIRING_C]];
 // M-07a и дальше: модуль → этап, на котором его тело намеренно изменено после переноса
 const CHANGED = {
   'render/materials.js': 'M-07a',
+  'render/parts/geometry.js': 'M-07a',
 };
 const cut = (s, a, b) => {
   const i = s.indexOf(a); assert.ok(i >= 0, `нет «${a}»`); assert.equal(s.indexOf(a, i + 1), -1, `«${a}» встречается дважды`);
