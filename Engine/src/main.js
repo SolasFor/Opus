@@ -254,5 +254,5 @@ window.engine = {
   explode: v => animateExplode(v), dispose, setAO, busy: () => tweens.size + (meanProgress() !== Math.round(meanProgress()) && !ui.stepMode ? 1 : 0), meanProgress, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
     programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, ao: aoOn() })
 };
-try { if (!window.__engFailed) boot(); }   // M-05a: запуск уже не удался (например, не загрузились стили) — сцену не собираем
+try { if (!window.__engStyleFailed) boot(); }   // M-05a: не загрузились стили — экран ошибки уже показан, сцену не собираем
 catch (err) { console.error(err); window.__engFail('Ошибка при сборке сцены: ' + window.__engEsc(err && err.message ? err.message : err), ['reload']); }

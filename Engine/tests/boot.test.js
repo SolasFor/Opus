@@ -175,7 +175,7 @@ test('стили не загрузились после встроенного �
   b.g.__engStyleError(); styleFailed(b);
   b.g.__engStyleError(); b.g.__engModuleError(); assert.match(b.view().msg, /файлы оформления/); assert.equal(b.fetches.length, 0);
   const m = boot({ fetchResult: 'ok' }); m.g.__engFail('Первая причина'); m.g.__engStyleError();
-  assert.match(m.view().msg, /Первая причина$/); assert.equal(m.loader.style.cssText, '');
+  assert.match(m.view().msg, /Первая причина$/); assert.equal(m.loader.style.cssText, ''); assert.equal(m.g.__engStyleFailed, true);
   const r = boot(); r.g.__engOk = true; r.g.__engScreen('ready'); r.g.__engStyleError();
   assert.equal(r.view().state, 'ready'); assert.equal(r.loader.style.cssText, '');
 });
@@ -187,6 +187,7 @@ test('ошибка скрипта до ready: текст ошибки экран
   assert.equal(v.state, 'failed');
   assert.match(v.msg, /Ошибка при запуске: Unexpected token &#60;img src=x onerror=alert\(1\)&#62;$/);
   assert.match(v.act, />Перезагрузить</);
+  assert.equal(b.g.__engStyleFailed, undefined, 'флаг стилей не ставится: main.js собирает сцену, как до M-05a');
   const r = boot(); r.g.__engOk = true; r.g.__engScreen('ready'); r.error('поздняя ошибка');
   assert.equal(r.view().state, 'ready');
 });
@@ -208,7 +209,7 @@ test('__engEsc экранирует & < > " \'', () => {
 
 test('main.js и модули: готовность и сбои идут через экран запуска; слушатели window/document снимаются в dispose()', () => {
   assert.match(MAIN, /window\.__engOk = true;\n\s+if \(!run\.lost\) window\.__engScreen\('ready'\);/);
-  assert.match(MAIN, /^try \{ if \(!window\.__engFailed\) boot\(\); \}/m, 'запуск уже не удался — сцену не собираем');
+  assert.match(MAIN, /^try \{ if \(!window\.__engStyleFailed\) boot\(\); \}/m, 'не загрузились стили — сцену не собираем; другие ошибки запуск не останавливают');
   assert.doesNotMatch(APP, /loader\.remove\(\)/);
   const global = APP.split('\n').filter(l => /\b(?:window|document)\.addEventListener\(/.test(l));
   assert.ok(global.length >= 4, 'слушатели window/document');

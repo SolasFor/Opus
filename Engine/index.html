@@ -218,9 +218,10 @@
       fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }).then(function () { fail(APP, ['retry', 'legacy']); }, cdn);
     };
     /* M-05a: не загрузился файл стилей (onerror у <link> в <head>; он может сработать и до этого скрипта — тогда флаг
-       __engStyleFailed). Без стилей страница непригодна: экран ошибки получает свои встроенные стили, а main.js не собирает
-       сцену, раз запуск уже не удался (__engFailed) */
+       __engStyleFailed). Без стилей страница непригодна: экран ошибки получает свои встроенные стили, а main.js по флагу
+       __engStyleFailed не собирает сцену. Другие ошибки до запуска main.js не останавливают, как и раньше */
     window.__engStyleError = function () {
+      window.__engStyleFailed = true;
       if (window.__engOk || window.__engFailed) return;
       document.getElementById('loader').style.cssText = 'position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;gap:18px;' +
         'align-items:center;justify-content:center;padding:24px;text-align:center;background:#0f1115;color:#e8edf5;font:14px/1.6 system-ui,sans-serif;color-scheme:dark';
