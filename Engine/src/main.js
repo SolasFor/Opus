@@ -29,18 +29,22 @@
  * ========================================================================== */
 import * as THREE from 'three';
 import { DEG, FIRE_DEG, CRANK_R, ROD_L, CAM_LIFT, SPARK_ADV, VS, VC } from './config/engine-spec.js';
-import { clamp, clamp01, mod } from './sim/math.js';
+import { clamp, mod } from './sim/math.js';
 import { strokeOf } from './sim/cycle.js';
 import { PIN_TDC } from './sim/kinematics.js';
 import { volumeAt, pressureAt } from './sim/thermo.js';
-import { Ease, tweens, tween, tweenTo, updateTweens } from './anim/tween.js';
-import { STEPS } from './config/steps.js';
+import { tweens, updateTweens } from './anim/tween.js';
 import { audio, setSpeedSource } from './audio/engine-audio.js';
-import { R_CRANK_SPR, IDLER, BASE_RPM, CAM_HOME, TGT_HOME, STROKES, V3, $ } from './render/world.js';
-import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, engineRoot, cutPlane, CAP, initScene, envRoom, envTarget, makeEnvironment, setLifecycle, storePixelRatio } from './render/scene.js';
+import { R_CRANK_SPR, IDLER, BASE_RPM, CAM_HOME, TGT_HOME, STROKES, $ } from './render/world.js';
+import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, cutPlane, initScene, envRoom, envTarget, makeEnvironment, setLifecycle, storePixelRatio } from './render/scene.js';
 import { nodes, nodesList, buildEngine } from './render/parts/nodes.js';
 import { sim, cycDeg, phaseOf, updateKinematics } from './render/kinematics.js';
 import { inPts, exPts, fx, buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
+import { ui, effSpeed, raycaster, pickables, el } from './ui/state.js';
+import { meanProgress, applyExplode, smoothExplode, boundsWith } from './ui/explode.js';
+import { exitStepMode, animateExplode, gotoStep, nextStep, prevStep, updateStepUI } from './ui/steps.js';
+import { tweenCamera, frameBox, fitIfNeeded, cameraPreset, resetView, focusOn } from './ui/camera.js';
+import { setView, cycleView, setCut } from './ui/view.js';
 
 /* ----------------------------------------------------------------------------
  * 1. КОНСТАНТЫ — мировые единицы: 1 ед. = 100 мм (соглашение модели) → src/render/world.js (M-02b)
@@ -79,148 +83,10 @@ import { inPts, exPts, fx, buildEffects, updateEffects, setEffectsSource } from 
  * ------------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------------
- * 10. ИНТЕРФЕЙС
+ * 10. ИНТЕРФЕЙС → src/ui/ (M-02c)
  * ------------------------------------------------------------------------- */
-const ui = {
-  explode: 0, explodeTw: null, stepMode: false, step: -1,
-  view: 'solid', cutZ: 0, labels: false, autoRotate: false,
-  selected: null, hover: null, isolated: null, pvCyl: 0,
-  scrubbing: false, wasRunning: false, firstRun: true, lastInteract: 0, camTw: null,
-  pointer: new THREE.Vector2(), pointerPx: { x: 0, y: 0 }, needHover: false, down: null, dragging: false
-};
-const effSpeed = () => sim.speed * (sim.slow ? 0.2 : 1);
 setSpeedSource(effSpeed);                   // M-02a: audio.fire() берёт текущую скорость отсюда
 setEffectsSource(ui, effSpeed);             // M-02b: эффекты тактов читают ui.isolated, ui.view и effSpeed()
-const raycaster = new THREE.Raycaster();
-let pickables = [];
-const el = {};
-
-/* ---------- explode / steps ---------- */
-function meanProgress() { return nodesList.reduce((a, n) => a + n.userData.progress, 0) / nodesList.length; }
-function applyExplode() {
-  for (const n of nodesList) {
-    const ud = n.userData, t = clamp01(ud.progress);
-    const e = Ease.inOutCubic(t) * 0.25 + t * 0.75;   // a touch of ease even for the raw slider value
-    n.position.lerpVectors(ud.originalPosition, ud.explodedPosition, e);
-    for (const lp of ud.localParts) lp.object.position.lerpVectors(lp.orig, lp.expl, e);
-  }
-}
-function smoothExplode(dt) {
-  if (ui.stepMode) return;
-  const k = 1 - Math.exp(-dt * 9);
-  for (const n of nodesList) {
-    const ud = n.userData;
-    ud.progress += (ui.explode - ud.progress) * k;
-    if (Math.abs(ui.explode - ud.progress) < 0.0005) ud.progress = ui.explode;
-  }
-}
-function killNodeTweens() { nodesList.forEach(n => { if (n.userData.tw) { n.userData.tw.kill(); n.userData.tw = null; } }); }
-function exitStepMode() {
-  if (!ui.stepMode) return;
-  ui.stepMode = false;
-  killNodeTweens();
-  ui.explode = meanProgress();
-  updateStepUI();
-}
-function animateExplode(v) {
-  exitStepMode();
-  if (ui.explodeTw) ui.explodeTw.kill();
-  ui.explodeTw = tweenTo(ui, 'explode', v, { dur: 1.3, ease: Ease.inOutCubic, onComplete() { ui.explodeTw = null; } });
-}
-function gotoStep(i) {
-  i = clamp(i, -1, STEPS.length - 1);
-  if (ui.explodeTw) { ui.explodeTw.kill(); ui.explodeTw = null; }
-  const prev = ui.stepMode ? ui.step : -1;
-  ui.stepMode = true;
-  ui.step = i;
-  const targets = {};
-  nodesList.forEach(n => {
-    const ud = n.userData, target = ud.stepIndex <= i ? 1 : 0;
-    targets[ud.key] = target;
-    if (Math.abs(ud.progress - target) < 1e-3 && !ud.tw) return;
-    if (ud.tw) ud.tw.kill();
-    const order = target ? ud.stepIndex - Math.max(0, prev) : Math.max(0, prev) - ud.stepIndex;
-    ud.tw = tweenTo(ud, 'progress', target, { dur: 0.95, delay: 0.07 * clamp(order, 0, 6), ease: Ease.inOutQuart, onComplete() { ud.tw = null; } });
-  });
-  updateStepUI();
-  fitIfNeeded(boundsWith(targets));
-}
-function nextStep() { gotoStep(ui.stepMode ? ui.step + 1 : 0); }
-function prevStep() { gotoStep(ui.stepMode ? ui.step - 1 : -1); }
-
-/* bounds of the engine for a hypothetical set of node progress values */
-function boundsWith(map) {
-  const saved = nodesList.map(n => n.userData.progress);
-  nodesList.forEach(n => { const k = n.userData.key; n.userData.progress = (typeof map === 'number') ? map : (map[k] ?? n.userData.progress); });
-  applyExplode();
-  engineRoot.updateMatrixWorld(true);
-  const box = new THREE.Box3();
-  nodesList.forEach(n => { if (!ui.isolated || ui.isolated === n) box.expandByObject(n); });
-  nodesList.forEach((n, i) => { n.userData.progress = saved[i]; });
-  applyExplode();
-  engineRoot.updateMatrixWorld(true);
-  return box;
-}
-
-/* ---------- camera ---------- */
-function tweenCamera(pos, target, dur = 1.0, delay = 0) {
-  if (ui.camTw) ui.camTw.kill();
-  let p0, t0;
-  ui.camTw = tween({ dur, delay, ease: Ease.inOutCubic,
-    onStart() { p0 = camera.position.clone(); t0 = controls.target.clone(); },
-    onUpdate(k) { camera.position.lerpVectors(p0, pos, k); controls.target.lerpVectors(t0, target, k); },
-    onComplete() { ui.camTw = null; } });
-}
-function distFor(box, pad = 1.18) {
-  const s = box.getBoundingSphere(new THREE.Sphere());
-  const fov = camera.fov * DEG, fovH = 2 * Math.atan(Math.tan(fov / 2) * camera.aspect);
-  return s.radius / Math.sin(Math.min(fov, fovH) / 2) * pad * 0.92;
-}
-function frameBox(box, dur = 1.2, delay = 0, dir = null) {
-  const c = box.getCenter(new THREE.Vector3());
-  const d = dir ? dir.clone().normalize() : camera.position.clone().sub(controls.target).normalize();
-  tweenCamera(c.clone().addScaledVector(d, distFor(box)), c, dur, delay);
-}
-function fitIfNeeded(box) {
-  const pts = [];
-  for (let i = 0; i < 8; i++) pts.push(V3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z));
-  const out = pts.some(p => { p.project(camera); return Math.abs(p.x) > 0.92 || Math.abs(p.y) > 0.9 || p.z > 1; });
-  if (out) frameBox(box, 1.1, 0.1);
-}
-const CAM_DIRS = { front: V3(0, 0.16, 1), side: V3(1, 0.18, 0.05), top: V3(0.001, 1, 0.12), iso: CAM_HOME.clone().sub(TGT_HOME) };
-function cameraPreset(name) {
-  ui.lastInteract = performance.now();
-  frameBox(boundsWith({}), 1.1, 0, CAM_DIRS[name]);
-  document.querySelectorAll('#camRow .btn').forEach(b => b.classList.toggle('act', b.dataset.cam === name));
-}
-function resetView() { cameraPreset('iso'); }
-function focusOn(node) {
-  const box = new THREE.Box3().setFromObject(node);
-  if (box.isEmpty()) return;
-  const c = box.getCenter(new THREE.Vector3());
-  const r = box.getSize(new THREE.Vector3()).length() / 2;
-  const dir = camera.position.clone().sub(controls.target).normalize();
-  tweenCamera(c.clone().addScaledVector(dir, Math.max(r * 2.3, 2.6)), c, 1.0);
-}
-
-/* ---------- view modes ---------- */
-const VIEW_NAMES = { solid: 'Сплошной', xray: 'Рентген', cut: 'Разрез' };
-function setView(mode) {
-  ui.view = mode;
-  CAP.uCapOn.value = mode === 'cut' ? 1 : 0;
-  cutPlane.constant = mode === 'cut' ? ui.cutZ : 100;
-  document.querySelectorAll('#viewSeg button').forEach(b => b.classList.toggle('act', b.dataset.mode === mode));
-  el.viewVal.textContent = VIEW_NAMES[mode];
-  el.cutRow.classList.toggle('open', mode === 'cut');
-  if (mode === 'cut' && camera.position.z - controls.target.z < 0.5) frameBox(boundsWith({}), 1.1, 0, V3(0.55, 0.32, 1));
-}
-function cycleView() { setView(ui.view === 'solid' ? 'xray' : ui.view === 'xray' ? 'cut' : 'solid'); }
-function setCut(v) {
-  ui.cutZ = -0.75 + 1.8 * v / 100;
-  if (ui.view === 'cut') cutPlane.constant = ui.cutZ;
-  el.cutSlider.style.setProperty('--p', v + '%');
-  el.cutVal.textContent = Math.abs(ui.cutZ) < 0.05 ? 'по осям цилиндров' : (ui.cutZ > 0 ? '+' : '−') + Math.round(Math.abs(ui.cutZ) * 100) + ' мм от оси';
-}
 
 /* ---------- selection / hover / isolation ---------- */
 function pick() {
@@ -461,28 +327,6 @@ function updateMaterials(dt) {
 
 /* ---------- step UI / sliders ---------- */
 function setRange(r, v, pct) { if (document.activeElement !== r || !ui.scrubbing) r.value = v; r.style.setProperty('--p', pct + '%'); }
-function updateStepUI() {
-  el.stepDots.textContent = '';
-  STEPS.forEach((s, i) => {
-    const d = document.createElement('button');
-    d.className = 'dot' + (ui.stepMode && i < ui.step ? ' done' : '') + (ui.stepMode && i === ui.step ? ' now' : '');
-    d.title = (i + 1) + '. ' + s.title;
-    d.addEventListener('click', () => gotoStep(i));
-    el.stepDots.appendChild(d);
-  });
-  if (ui.stepMode && ui.step >= 0) {
-    const s = STEPS[ui.step];
-    el.stepCount.textContent = 'ШАГ ' + (ui.step + 1) + ' / ' + STEPS.length;
-    el.stepTitle.innerHTML = '<span>' + (ui.step + 1) + '.</span> ' + s.title;
-    el.stepNote.textContent = s.note;
-  } else {
-    el.stepCount.textContent = ui.stepMode ? 'ШАГ 0 / ' + STEPS.length : 'ПО ШАГАМ';
-    el.stepTitle.textContent = 'Двигатель собран';
-    el.stepNote.innerHTML = 'Нажмите <b>Далее</b>: свечи → ремень ГРМ → распредвалы → коллекторы → ГБЦ → блок → поршни → коленвал.';
-  }
-  el.btnPrev.disabled = !ui.stepMode || ui.step < 0;
-  el.btnNext.disabled = ui.stepMode && ui.step >= STEPS.length - 1;
-}
 function speedFromSlider(v) { return 0.05 * Math.pow(200, v / 100); }
 function updateSpeedUI() {
   const v = +el.speedSlider.value;

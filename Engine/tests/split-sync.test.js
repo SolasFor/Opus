@@ -69,6 +69,11 @@ const WIRING_B = {
 };
 // M-02c: модуль → [строки main.js@a463fb8 (как в sed -n), sha256 этих строк]; строки связки — как в WIRING_B
 const UI = {
+  'ui/state.js': ['84,91p;94,96p', 'a4994ecb108e16a841ebc38f143dafdb17fcf610ff0c321a816d5fc9d0b74fd8'],
+  'ui/explode.js': ['98,117p;151,163p', '2280bbbc2659a9842dd882b565987a99f577521fb8d223f26529dd8cd944e83c'],
+  'ui/steps.js': ['118,149p;464,485p', 'cfe113ba4adb778a026629c4aa8323c660b6821aa5a101ab57b97819ee3c34dc'],
+  'ui/camera.js': ['165,204p', 'c1cf0ba6b111a90a9ba7aff8e7a14c39853071052218ca6d0bb0755b718ccbb2'],
+  'ui/view.js': ['206,223p', '02ab8c84b8af1fc98457b131f3d776fd41aa387d2af51d510170ffdd91748ee0'],
 };
 const WIRING_C = {
 };
