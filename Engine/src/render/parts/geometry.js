@@ -3,10 +3,11 @@
  * M-02b: из раздела 6 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
  * проверяет tests/split-sync.test.js.
  * Здесь начало раздела 6 и две последние функции блока «nodes».
- * M-07a: nodeMat() подключает к материалу узла процедурную фактуру (applySurface из render/surface.js).
+ * M-07a: nodeMat() подключает к материалу узла процедурную фактуру (applySurface из render/surface.js);
+ * extrudeX и extrudeY сглаживают нормали (smooth).
  */
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3 } from '../world.js';
 import { makeHousing } from '../materials.js';
 import { applySurface } from '../surface.js';
@@ -19,19 +20,23 @@ const G = {
   torusX: (R, t, rs = 10, ts = 28) => new THREE.TorusGeometry(R, t, rs, ts).rotateY(Math.PI / 2),
   torusY: (R, t, rs = 8, ts = 24) => new THREE.TorusGeometry(R, t, rs, ts).rotateX(Math.PI / 2)
 };
+/* M-07a: у ExtrudeGeometry нормали по граням — дуги и фаски выглядят гранёными. Нормали усредняются между гранями,
+ * которые сходятся под углом меньше CREASE; более острые кромки (торцы, зубья) остаются резкими. */
+const CREASE = 38 * Math.PI / 180;
+function smooth(g) { const r = toCreasedNormals(g, CREASE); if (r !== g) g.dispose(); return r; }
 /* shape in (u,v) extruded along world X; (u,v) → world (·, v, −u) */
 function extrudeX(shape, depth, seg = 24, bevel = 0) {
   const g = new THREE.ExtrudeGeometry(shape, { depth, curveSegments: seg, bevelEnabled: bevel > 0,
     bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2 });
   g.translate(0, 0, -depth / 2);
   g.rotateY(Math.PI / 2);
-  return g;
+  return smooth(g);
 }
 /* shape in (x,v) extruded along world +Y from 0..depth; (x,v) → world (x, ·, −v) */
 function extrudeY(shape, depth, seg = 32) {
   const g = new THREE.ExtrudeGeometry(shape, { depth, curveSegments: seg, bevelEnabled: false });
   g.rotateX(-Math.PI / 2);
-  return g;
+  return smooth(g);
 }
 function gearShape(teeth, rRoot, rTip) {
   const s = new THREE.Shape();

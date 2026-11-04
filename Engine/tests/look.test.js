@@ -5,7 +5,7 @@
  *    молча. applySurface() дополняет onBeforeCompile и ключ программы материала; без WebGL2 шейдер не меняет;
  *    материал без вида фактуры или с неизвестным видом не трогает.
  * 2) Статически: каждый материал M.x, который упоминает код, объявлен в createMaterials(); вид фактуры userData.surf —
- *    из KINDS; nodeMat() подключает фактуру к клону материала до makeHousing().
+ *    из KINDS; nodeMat() подключает фактуру к клону материала до makeHousing(); extrudeX и extrudeY сглаживают нормали.
  * Без сторонних зависимостей.
  */
 import test from 'node:test';
@@ -102,6 +102,16 @@ test('материалы: каждый M.x, который упоминает к
     const s = l.match(/^ {4}([\w$]+): *S\((?:std|phys)\(\{[^{}]*\}\), '([\w$]+)'\),?(?: *\/\/.*)?$/);
     if (!s) { assert.match(l, /^ {4}ceramic: *phys\(/, `без фактуры — только керамика: ${l.trim()}`); continue; }
     assert.ok(s[2] in KINDS, `M.${s[1]}: вид фактуры ${s[2]} не из KINDS`);
+  }
+});
+
+test('extrudeX и extrudeY сглаживают нормали до угла 38°: дуги и фаски не гранёные', () => {
+  const geo = read('../src/render/parts/geometry.js');
+  assert.match(geo, /^const CREASE = 38 \* Math\.PI \/ 180;$/m);
+  assert.match(geo, /^function smooth\(g\) \{ const r = toCreasedNormals\(g, CREASE\); if \(r !== g\) g\.dispose\(\); return r; \}$/m);
+  for (const f of ['extrudeX', 'extrudeY']) {
+    const body = geo.slice(geo.indexOf(`function ${f}(`), geo.indexOf('\n}\n', geo.indexOf(`function ${f}(`)));
+    assert.match(body, /\n  return smooth\(g\);$/, f);
   }
 });
 
