@@ -14,6 +14,7 @@
  *      --radius) — псевдонимы токенов.
  *   5) Шрифт интерфейса — системный (--font-ui, П-2, T-27): Inter был объявлен, но не загружался. Его нет ни в стилях,
  *      ни в разметке, ни в коде, в том числе в шрифтах диаграмм на canvas.
+ *   6) Значок вкладки — встроенный SVG «4Т» (data URI, П-14, T-26): браузер не запрашивает /favicon.ico, которого нет.
  * Без сторонних зависимостей.
  */
 import test from 'node:test';
@@ -101,4 +102,13 @@ test('шрифт: системный --font-ui, Inter нигде не упоми
   assert.match(TOK.get('--font-ui'), /^system-ui,/);
   for (const [name, text] of [['index.html', INDEX], ['styles/app.css', APP], ['styles/tokens.css', TOKENS],
     ...walk('').map(f => [`src/${f}`, read(`../src/${f}`)])]) assert.doesNotMatch(text, /\bInter\b/, name);
+});
+
+test('значок вкладки: встроенный SVG «4Т», без внешних файлов', () => {
+  const icons = [...HEAD.matchAll(/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,([^"]+)" \/>/g)];
+  assert.equal(icons.length, 1); assert.equal(count(INDEX, 'rel="icon"'), 1);
+  const svg = decodeURIComponent(icons[0][1]);
+  assert.match(svg, /^<svg xmlns='http:\/\/www\.w3\.org\/2000\/svg' viewBox='0 0 32 32'>[\s\S]*<\/svg>$/);
+  assert.match(svg, />4Т<\/text>/);
+  assert.doesNotMatch(svg.replace("xmlns='http://www.w3.org/2000/svg'", ''), /https?:|href|url\(|<script|<image/i);
 });
