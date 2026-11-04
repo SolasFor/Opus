@@ -9,6 +9,9 @@
  * holePath, poly), выдавливание с фаской внутрь, без роста внешних размеров (extrudeXb, extrudeZ, extrudeY с bevel),
  * болт с шайбой (Parts.bolt). Parts.add() переводит ключи-цвета (M.bolt и др., materials.js) в цвет вершин общего
  * материала узла, поэтому крепёж и мелочь узла — один меш.
+ * M-07c: уровень детализации «низкий» (detail.low, задаёт setDetail() до сборки узлов): у дуг и тел вращения вдвое
+ * меньше сегментов (lodSeg), крепёж и мелочь (ключи-цвета общего материала hw) не добавляются. G.lathe — с сектором
+ * (p0, pl), G.tube — труба по кривой.
  */
 import * as THREE from 'three';
 import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -17,19 +20,25 @@ import { V3 } from '../world.js';
 import { M, makeHousing } from '../materials.js';
 import { applySurface } from '../surface.js';
 
+/* M-07c: уровень детализации. «Низкий» — вдвое меньше сегментов, но не меньше 8; 8 и меньше (шестигранники,
+ * сечения тонких торов) не меняются */
+const detail = { low: false };
+const setDetail = low => { detail.low = !!low; };
+const lodSeg = n => (detail.low && n > 8 ? Math.max(8, Math.round(n / 2)) : n);
 const G = {
   box: (w, h, d) => new THREE.BoxGeometry(w, h, d),
-  cyl: (rt, rb, h, s = 24, open = false) => new THREE.CylinderGeometry(rt, rb, h, s, 1, open),
-  cylX: (r, len, s = 22) => new THREE.CylinderGeometry(r, r, len, s).rotateZ(Math.PI / 2),
-  cylZ: (r, len, s = 22) => new THREE.CylinderGeometry(r, r, len, s).rotateX(Math.PI / 2),
-  torusX: (R, t, rs = 10, ts = 28) => new THREE.TorusGeometry(R, t, rs, ts).rotateY(Math.PI / 2),
-  torusY: (R, t, rs = 8, ts = 24) => new THREE.TorusGeometry(R, t, rs, ts).rotateX(Math.PI / 2),
+  cyl: (rt, rb, h, s = 24, open = false) => new THREE.CylinderGeometry(rt, rb, h, lodSeg(s), 1, open),
+  cylX: (r, len, s = 22) => new THREE.CylinderGeometry(r, r, len, lodSeg(s)).rotateZ(Math.PI / 2),
+  cylZ: (r, len, s = 22) => new THREE.CylinderGeometry(r, r, len, lodSeg(s)).rotateX(Math.PI / 2),
+  torusX: (R, t, rs = 10, ts = 28) => new THREE.TorusGeometry(R, t, lodSeg(rs), lodSeg(ts)).rotateY(Math.PI / 2),
+  torusY: (R, t, rs = 8, ts = 24) => new THREE.TorusGeometry(R, t, lodSeg(rs), lodSeg(ts)).rotateX(Math.PI / 2),
   // M-07b: скруглённые кромки (радиус не больше половины стороны), тела вращения по профилю, шестигранник
   rbox: (w, h, d, r = 0.02, s = 2) => new RoundedBoxGeometry(w, h, d, s, Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4)),
-  lathe: (pts, seg = 32) => new THREE.LatheGeometry(profile(pts), seg),
-  latheX: (pts, seg = 32) => G.lathe(pts, seg).rotateZ(-Math.PI / 2),
-  latheZ: (pts, seg = 32) => G.lathe(pts, seg).rotateX(Math.PI / 2),
-  hex: (r, h) => new THREE.CylinderGeometry(r, r, h, 6)
+  lathe: (pts, seg = 32, p0 = 0, pl = Math.PI * 2) => new THREE.LatheGeometry(profile(pts), lodSeg(seg), p0, pl),
+  latheX: (pts, seg = 32, p0, pl) => G.lathe(pts, seg, p0, pl).rotateZ(-Math.PI / 2),
+  latheZ: (pts, seg = 32, p0, pl) => G.lathe(pts, seg, p0, pl).rotateX(Math.PI / 2),
+  hex: (r, h) => new THREE.CylinderGeometry(r, r, h, 6),
+  tube: (curve, n, r, rs = 8) => new THREE.TubeGeometry(curve, lodSeg(n), r, lodSeg(rs), false)   // M-07c
 };
 /* M-07b: профиль тела вращения — точки [r, y] снизу вверх по наружной поверхности. Угол острый (точка повторяется,
  * нормали не усредняются); третий элемент 1 — гладкая точка. */
@@ -53,7 +62,7 @@ const CREASE = 38 * Math.PI / 180;
 function smooth(g) { const r = toCreasedNormals(g, CREASE); if (r !== g) g.dispose(); return r; }
 /* shape in (u,v) extruded along world X; (u,v) → world (·, v, −u) */
 function extrudeX(shape, depth, seg = 24, bevel = 0) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth, curveSegments: seg, bevelEnabled: bevel > 0,
+  const g = new THREE.ExtrudeGeometry(shape, { depth, curveSegments: lodSeg(seg), bevelEnabled: bevel > 0,
     bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2 });
   g.translate(0, 0, -depth / 2);
   g.rotateY(Math.PI / 2);
@@ -62,7 +71,7 @@ function extrudeX(shape, depth, seg = 24, bevel = 0) {
 /* shape in (x,v) extruded along world +Y from 0..depth; (x,v) → world (x, ·, −v).
  * M-07b: bevel > 0 — фаска внутрь контура: внешний размер и высота те же, что без фаски */
 function extrudeY(shape, depth, seg = 32, bevel = 0) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth: depth - 2 * bevel, curveSegments: seg, bevelEnabled: bevel > 0,
+  const g = new THREE.ExtrudeGeometry(shape, { depth: depth - 2 * bevel, curveSegments: lodSeg(seg), bevelEnabled: bevel > 0,
     bevelThickness: bevel, bevelSize: bevel * 0.8, bevelOffset: -bevel * 0.8, bevelSegments: 2 });
   g.translate(0, 0, bevel);
   g.rotateX(-Math.PI / 2);
@@ -70,14 +79,14 @@ function extrudeY(shape, depth, seg = 32, bevel = 0) {
 }
 /* M-07b: shape in (x,y) extruded along world Z, centred; фаска внутрь, как у extrudeY */
 function extrudeZ(shape, depth, seg = 24, bevel = 0) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth: depth - 2 * bevel, curveSegments: seg, bevelEnabled: bevel > 0,
+  const g = new THREE.ExtrudeGeometry(shape, { depth: depth - 2 * bevel, curveSegments: lodSeg(seg), bevelEnabled: bevel > 0,
     bevelThickness: bevel, bevelSize: bevel * 0.8, bevelOffset: -bevel * 0.8, bevelSegments: 2 });
   g.translate(0, 0, -(depth - 2 * bevel) / 2);
   return smooth(g);
 }
 /* M-07b: extrudeX с фаской внутрь: внешний размер равен контуру и толщине */
 function extrudeXb(shape, depth, seg = 24, bevel = 0.01) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth: depth - 2 * bevel, curveSegments: seg, bevelEnabled: true,
+  const g = new THREE.ExtrudeGeometry(shape, { depth: depth - 2 * bevel, curveSegments: lodSeg(seg), bevelEnabled: true,
     bevelThickness: bevel, bevelSize: bevel * 0.8, bevelOffset: -bevel * 0.8, bevelSegments: 2 });
   g.translate(0, 0, -(depth - 2 * bevel) / 2);
   g.rotateY(Math.PI / 2);
@@ -107,6 +116,7 @@ function gearShape(teeth, rRoot, rTip) {
 class Parts {
   constructor() { this.byMat = new Map(); this.noShadow = new Set(); }
   add(geo, mat, pos, rot, scl) {
+    if (detail.low && mat.userData.into === 'hw') { geo.dispose(); return this; }   // M-07c: «низкий» — без мелочи
     let g = geo.index ? geo.toNonIndexed() : geo;
     if (g !== geo) geo.dispose();
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
@@ -130,7 +140,9 @@ class Parts {
     this.byMat.get(mat).push(g);
     return this;
   }
-  bolt(mat, pos, dir = 'y', r = 0.04, h = 0.035) { return this.add(boltGeo(r, h), mat, pos, ROT[dir]); }   // M-07b
+  bolt(mat, pos, dir = 'y', r = 0.04, h = 0.035) {   // M-07b; M-07c: «низкий» — без болтов
+    return detail.low && mat.userData.into === 'hw' ? this : this.add(boltGeo(r, h), mat, pos, ROT[dir]);
+  }
   geometries() {
     const out = [];
     for (const [mat, list] of this.byMat) { out.push([mat, mergeGeometries(list, false)]); list.forEach(g => g.dispose()); }
@@ -175,4 +187,4 @@ function registerLocalPart(node, object, orig, expl) {
   object.position.set(...orig);
 }
 
-export { G, extrudeX, extrudeXb, extrudeY, extrudeZ, gearShape, Parts, nodeMat, registerLocalPart, roundRect, holePath, poly };
+export { G, extrudeX, extrudeXb, extrudeY, extrudeZ, gearShape, Parts, nodeMat, registerLocalPart, roundRect, holePath, poly, detail, setDetail };

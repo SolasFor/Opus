@@ -3,6 +3,7 @@
  * проверяет tests/split-sync.test.js.
  * M-07b: по прототипу M-07: рёбра ресивера, литой дроссельный узел с приводом и болтами, гофрированный патрубок
  * с хомутом, общий фланец с болтами, топливная рампа с форсунками. Осевые линии труб и пути частиц прежние.
+ * M-07c: трубы — G.tube (на уровне «низкий» вдвое меньше сегментов).
  */
 import * as THREE from 'three';
 import { CYL_X, V3 } from '../world.js';
@@ -36,7 +37,7 @@ function buildIntake(g) {
   [-1.1, 1.1].forEach(x => { P.add(G.rbox(0.06, 0.30, 0.16, 0.012), M.aluCast, [x, 3.27, -1.16]); P.bolt(M.bolt, [x, 3.46, -1.22], 'y', 0.025, 0.02); });
   CYL_X.forEach((x, i) => {
     const pts = [V3(x, PLEN.y - 0.05, PLEN.z + 0.15), V3(x, 3.30, -1.75), V3(x, 3.06, -1.42), V3(x, 2.96, -1.06)];
-    P.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 40, 0.13, 24, false), M.plastic);
+    P.add(G.tube(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 40, 0.13, 24), M.plastic);
     P.add(G.latheZ([[0, 0], [0.16, 0], [0.16, 0.04], [0.135, 0.05], [0, 0.05]], 32), M.plastic, [x, 2.955, -1.135]);
     // injector: O-ring, body, connector
     P.add(G.lathe([[0, 0], [0.028, 0], [0.028, 0.06], [0.04, 0.07], [0.045, 0.16, 1], [0.05, 0.19], [0.05, 0.25], [0.036, 0.26], [0, 0.26]], 20), M.paintBlack, [x, 3.13, -1.22]);

@@ -95,8 +95,8 @@ const MOVES = [['ac34ff3', RENDER, WIRING_B], ['a463fb8', UI, WIRING_C]];
 const CHANGED = {
   'render/parts/block.js': 'M-07b',
   'render/parts/head.js': 'M-07b',
-  'render/parts/intake.js': 'M-07b',
-  'render/parts/exhaust.js': 'M-07b',
+  'render/parts/intake.js': 'M-07b, M-07c',
+  'render/parts/exhaust.js': 'M-07b, M-07c',
   'render/scene.js': 'M-07a',
   'render/materials.js': 'M-07a',
   'render/parts/geometry.js': 'M-07a',

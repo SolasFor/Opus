@@ -8,6 +8,8 @@
  * M-07b: обработанный алюминий (aluMach), чёрная краска (paintBlack), теплоэкран (shield). Крепёж и мелочь рисуются
  * одним мешем на узел: ключи tint() задают только цвет, Parts.add() пишет его в цвет вершин общего материала
  * hw (металл) или paintHw (краска), поэтому эти ключи сами в сцену не попадают.
+ * M-07c: поковки (forged: щёки коленвала, маховик, шатуны), точёный поршень (piston); ключи-цвета hole (тёмные
+ * заглушки — вид сверлений и облегчающих отверстий) и carbon (нагар на тарелках клапанов).
  */
 import * as THREE from 'three';
 import { cutPlane, CAP } from './scene.js';
@@ -57,6 +59,8 @@ function createMaterials() {
     // сталь: шлифованные шейки и стержни, поковки
     steel:    S(std({ color: 0xb4b8bc, metalness: 1.00, roughness: 0.30 }), 'machined'),
     steelDark:S(std({ color: 0x6a6e72, metalness: 1.00, roughness: 0.46 }), 'forged'),
+    forged:   S(std({ color: 0x7b7f83, metalness: 1.00, roughness: 0.50 }), 'forged'),     // M-07c: поковки
+    piston:   S(std({ color: 0xc0c3c6, metalness: 0.92, roughness: 0.36 }), 'machined'),   // M-07c: точёный поршень
     chrome:   S(std({ color: 0xd2d6da, metalness: 1.00, roughness: 0.16 }), 'machined'),
     brass:    S(std({ color: 0xb98652, metalness: 1.00, roughness: 0.34 }), 'machined'),   // вкладыши
     rings:    S(std({ color: 0x2a2d31, metalness: 1.00, roughness: 0.36 }), 'machined'),
@@ -85,7 +89,9 @@ function createMaterials() {
     fitting:  tint(0xb4b8bc),   // мелкие стальные детали (цвет steel)
     fittingDark: tint(0x6a6e72),   // шайбы, пробки (цвет steelDark)
     shell:    tint(0xb98652),   // вкладыши коренных подшипников (цвет brass)
-    wire:     tint(0x151618)    // провод датчика (цвет rubber)
+    wire:     tint(0x151618),   // провод датчика, резина демпфера (цвет rubber)
+    hole:     tint(0x111214),   // M-07c: сверления и облегчающие отверстия — тёмные заглушки
+    carbon:   tint(0x2b2826)    // M-07c: нагар на тарелках клапанов (цвет soot)
   };
   M.belt.userData.isBelt = true;
   M.pipe.userData.isPipe = true;

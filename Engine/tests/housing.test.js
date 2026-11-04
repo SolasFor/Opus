@@ -67,7 +67,7 @@ const PATHS = {
 ]
 };
 const paths = s => [...s.matchAll(/(?:const (?:PLEN|COLL|outPts|pts|path|outCurve) =|for \(let px|path\.push\(|(?:intake|exhaust)Paths\[i\] =)[^;]*;/g)].map(m => m[0].replace(/\s+/g, ' '));
-const tubes = s => [...s.matchAll(/TubeGeometry\((?:new THREE\.CatmullRomCurve3\((pts|outCurve)[^)]*\)|(outCurve)), \d+, ([\d.]+),/g)].map(m => `${m[1] || m[2]} ${m[3]}`);
+const tubes = s => [...s.matchAll(/(?:TubeGeometry|G\.tube)\((?:new THREE\.CatmullRomCurve3\((pts|outCurve)[^)]*\)|(outCurve)), \d+, ([\d.]+),/g)].map(m => `${m[1] || m[2]} ${m[3]}`);
 
 test('пути частиц, ресивер, коллектор и осевые линии труб — как на main@307a0c0; радиусы труб прежние', () => {
   for (const [f, exp] of Object.entries(PATHS)) assert.deepEqual(paths(PART(f)), exp, f);
@@ -84,7 +84,7 @@ test('фаска внутрь: extrudeY, extrudeZ, extrudeXb не меняют �
     assert.match(body, /bevelThickness: bevel, bevelSize: bevel \* 0\.8, bevelOffset: -bevel \* 0\.8,/, `${f}: фаска внутрь контура`);
   }
   assert.match(GEO, /^function extrudeY\(shape, depth, seg = 32, bevel = 0\) \{$/m, 'extrudeY без фаски — как раньше');
-  assert.match(GEO, /function extrudeX\(shape, depth, seg = 24, bevel = 0\) \{\n  const g = new THREE\.ExtrudeGeometry\(shape, \{ depth, curveSegments: seg, bevelEnabled: bevel > 0,\n    bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2 \}\);/);
+  assert.match(GEO, /function extrudeX\(shape, depth, seg = 24, bevel = 0\) \{\n  const g = new THREE\.ExtrudeGeometry\(shape, \{ depth, curveSegments: lodSeg\(seg\), bevelEnabled: bevel > 0,\n    bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2 \}\);/);
 });
 
 test('Parts.add(): ключ-цвет → цвет вершин и общий материал; Parts.bolt() — болт по направлению ROT', () => {
@@ -93,7 +93,7 @@ test('Parts.add(): ключ-цвет → цвет вершин и общий м�
   assert.ok(strip > 0 && into > strip, 'цвет добавляется после очистки атрибутов');
   assert.match(add, /g\.setAttribute\('color', new THREE\.BufferAttribute\(a, 3\)\);\n      mat = M\[into\];/);
   assert.ok(add.indexOf('this.byMat.has(mat)') > add.indexOf('mat = M[into];'), 'меш группируется по общему материалу');
-  assert.match(GEO, /^  bolt\(mat, pos, dir = 'y', r = 0\.04, h = 0\.035\) \{ return this\.add\(boltGeo\(r, h\), mat, pos, ROT\[dir\]\); \}/m);
+  assert.match(GEO, /^  bolt\(mat, pos, dir = 'y', r = 0\.04, h = 0\.035\) \{[^\n]*\n    return detail\.low && mat\.userData\.into === 'hw' \? this : this\.add\(boltGeo\(r, h\), mat, pos, ROT\[dir\]\);\n  \}/m);
   assert.match(GEO, /^const ROT = \{ y: null, '-y': \[Math\.PI, 0, 0\], z: \[Math\.PI \/ 2, 0, 0\], '-z': \[-Math\.PI \/ 2, 0, 0\], x: \[0, 0, -Math\.PI \/ 2\], '-x': \[0, 0, Math\.PI \/ 2\] \};$/m);
   assert.match(MATS, /const tint = \(color, into = 'hw'\) => \{ const m = std\(\{ color \}\); m\.userData\.into = into; return m; \};/);
 });

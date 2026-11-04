@@ -3,6 +3,7 @@
  * проверяет tests/split-sync.test.js.
  * M-07b: по прототипу M-07: фланцы со шпильками и медными гайками, сварные швы, лямбда-зонд, фланец приёмной
  * трубы, штампованный теплоэкран по дуге. Осевые линии труб и пути частиц прежние.
+ * M-07c: трубы — G.tube (на уровне «низкий» вдвое меньше сегментов).
  */
 import * as THREE from 'three';
 import { CYL_X, V3 } from '../world.js';
@@ -17,7 +18,7 @@ function buildExhaust(g) {
   const outPts = [V3(1.98, COLL.y, COLL.z), V3(2.5, COLL.y - 0.03, COLL.z + 0.17), V3(2.92, COLL.y - 0.1, COLL.z + 0.52)];
   CYL_X.forEach((x, i) => {
     const pts = [V3(x, 2.88, 0.98), V3(x, 2.88, 1.36), V3(x, 2.70, 1.72), V3(x, 2.20, COLL.z), V3(x, COLL.y + 0.05, COLL.z)];
-    P.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 56, 0.15, 24, false), M.pipe);
+    P.add(G.tube(new THREE.CatmullRomCurve3(pts), 56, 0.15, 24), M.pipe);
     // port flange: cast plate with studs and copper nuts
     P.add(G.rbox(0.46, 0.38, 0.07, 0.02), M.pipe2, [x, 2.88, 1.0]);
     [-0.17, 0.17].forEach(dx => { P.add(G.cylZ(0.016, 0.10, 8), M.fitting, [x + dx, 2.88 + 0.13 * Math.sign(dx), 1.06]);
@@ -35,9 +36,9 @@ function buildExhaust(g) {
   P.add(toZ(G.cyl(0.06, 0.06, 0.05, 20)), M.pipe2, [1.25, COLL.y, COLL.z + 0.25]);
   P.add(toZ(G.hex(0.055, 0.05)), M.fitting, [1.25, COLL.y, COLL.z + 0.30]);
   P.add(G.latheZ([[0, 0], [0.035, 0], [0.04, 0.06], [0.04, 0.14], [0.025, 0.16], [0, 0.16]], 16), M.fitting, [1.25, COLL.y, COLL.z + 0.32]);
-  P.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V3(1.25, COLL.y, COLL.z + 0.48), V3(1.3, COLL.y + 0.05, COLL.z + 0.62), V3(1.5, COLL.y + 0.25, COLL.z + 0.66)]), 12, 0.012, 6), M.wire);
+  P.add(G.tube(new THREE.CatmullRomCurve3([V3(1.25, COLL.y, COLL.z + 0.48), V3(1.3, COLL.y + 0.05, COLL.z + 0.62), V3(1.5, COLL.y + 0.25, COLL.z + 0.66)]), 12, 0.012, 6), M.wire);
   const outCurve = new THREE.CatmullRomCurve3(outPts);
-  P.add(new THREE.TubeGeometry(outCurve, 30, 0.22, 28, false), M.pipe2);
+  P.add(G.tube(outCurve, 30, 0.22, 28), M.pipe2);
   const end = outCurve.getPoint(1), dir = outCurve.getTangent(1).normalize();
   const q = new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), dir);
   const fl = G.rbox(0.62, 0.07, 0.42, 0.03);
