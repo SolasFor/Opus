@@ -17,7 +17,7 @@ const SRC = new URL('../src/', import.meta.url);
 const walk = d => readdirSync(new URL(d, SRC), { withFileTypes: true })
   .flatMap(e => e.isDirectory() ? walk(`${d}${e.name}/`) : e.name.endsWith('.js') ? [d + e.name] : []);
 // весь код модульной версии, кроме модели (config, sim): main.js и вынесенные из него модули
-const APP = ['main.js', ...['anim/', 'audio/', 'render/'].filter(d => existsSync(new URL(d, SRC))).flatMap(walk)]
+const APP = ['main.js', ...['anim/', 'audio/', 'render/', 'ui/'].filter(d => existsSync(new URL(d, SRC))).flatMap(walk)]
   .map(f => read(`../src/${f}`)).join('\n');
 const scripts = [...INDEX.matchAll(/<script>\n([\s\S]*?)<\/script>/g)].map(m => m[1]);
 const IMPORTMAP = INDEX.match(/<script type="importmap">\n([\s\S]*?)<\/script>/)[1];

@@ -6,7 +6,7 @@
  * (M-01b), который требовал побайтного и построчного совпадения двух версий.
  *   1) sha256 Engine.html равен зафиксированному. Правка Engine.html — только по отдельному решению владельца;
  *      новый хэш фиксируется вместе с этим решением.
- *   2) Каждое имя, которое main.js и вынесенные из него модули (anim, audio, render — M-02) импортируют из ./config
+ *   2) Каждое имя, которое main.js и вынесенные из него модули (anim, audio, render, ui — M-02) импортируют из ./config
  *      и ./sim, экспортируется модулем и используется в импортирующем модуле.
  *   3) Каждое имя из этих модулей, которое упоминает такой модуль, импортировано или объявлено в нём
  *      (иначе ReferenceError в редкой ветке кода). Имена в комментариях и строках не считаются.
@@ -28,7 +28,7 @@ const code = s => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/g
   .replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, '""')
   .replace(/`(?:\\[\s\S]|[^`\\])*`/g, t => ' ' + [...t.matchAll(/\$\{([^{}]*)\}/g)].map(m => m[1]).join(' ') + ' ');
 // main.js и вынесенные из него модули; импорты модели — из ./config и ./sim (из любой глубины)
-const FILES = ['main.js', ...['anim/', 'audio/', 'render/'].filter(d => existsSync(new URL(d, SRC))).flatMap(walk)].map(f => {
+const FILES = ['main.js', ...['anim/', 'audio/', 'render/', 'ui/'].filter(d => existsSync(new URL(d, SRC))).flatMap(walk)].map(f => {
   const lines = read(`../src/${f}`).split('\n');
   return { f, imports: lines.filter(l => /^import .* from '(?:\.\.?\/)+(?:config|sim)\//.test(l)),
     rest: code(lines.filter(l => !l.startsWith('import ')).join('\n')) };
