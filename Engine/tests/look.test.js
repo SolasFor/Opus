@@ -182,7 +182,7 @@ test('кадр и снимок экрана рисует renderFrame(); renderer
   const main = read('../src/main.js'), controls = read('../src/ui/controls.js');
   assert.match(fn(main, 'frame'), /\n  renderFrame\(\);/);
   assert.match(fn(controls, 'screenshot'), /^function screenshot\(\) \{\n  renderFrame\(\);\n  const url = renderer\.domElement\.toDataURL/);
-  assert.match(fn(main, 'boot'), /^function boot\(\) \{\n  initScene\(\);\n  setAO\(wantAO\(params, \{ webgl2: renderer\.capabilities\.isWebGL2, coarse: matchMedia\('\(pointer: coarse\)'\)\.matches \}\)\);\n/);
+  assert.match(fn(main, 'boot'), /^function boot\(\) \{\n  initScene\(\);\n  const coarse = matchMedia\('\(pointer: coarse\)'\)\.matches, low = lowDetail\(params, \{ coarse \}\);[^\n]*\n  setAO\(wantAO\(params, \{ webgl2: renderer\.capabilities\.isWebGL2, coarse, low \}\)\);\n  buildEngine\(low\);\n/);
   const dispose = fn(main, 'dispose');
   assert.ok(dispose.indexOf('disposePost();') > 0 && dispose.indexOf('disposePost();') < dispose.indexOf('renderer.dispose();'), 'disposePost() до renderer.dispose()');
   const post = read('../src/render/post.js');

@@ -15,6 +15,7 @@
  * M-07a: кадр и снимок экрана рисует renderFrame() из src/render/post.js — с экранным затенением GTAO на уровне
  * качества «высокое» (src/render/quality.js) или прежним renderer.render(); адаптивное разрешение выключает AO,
  * если кадр медленный и при pixelRatio 1.
+ * M-07c: уровень детализации «низкий» (lowDetail из src/render/quality.js) выбирается до buildEngine(); на нём нет AO.
  */
 /* ============================================================================
  * ЧЕТЫРЁХТАКТНЫЙ ДВИГАТЕЛЬ — интерактивная 3D-разборка (рядная «четвёрка», DOHC 16V)
@@ -43,7 +44,7 @@ import { nodes, nodesList, buildEngine } from './render/parts/nodes.js';
 import { sim, cycDeg, phaseOf, updateKinematics } from './render/kinematics.js';
 import { buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
 import { setAO, aoOn, renderFrame, disposePost } from './render/post.js';
-import { SLOW_RUN, wantAO, slowRun } from './render/quality.js';
+import { SLOW_RUN, wantAO, lowDetail, slowRun } from './render/quality.js';
 import { ui, effSpeed, pickables, el } from './ui/state.js';
 import { meanProgress, applyExplode, smoothExplode } from './ui/explode.js';
 import { animateExplode, gotoStep } from './ui/steps.js';
@@ -228,8 +229,9 @@ function dispose() {
  * ------------------------------------------------------------------------- */
 function boot() {
   initScene();
-  setAO(wantAO(params, { webgl2: renderer.capabilities.isWebGL2, coarse: matchMedia('(pointer: coarse)').matches }));
-  buildEngine();
+  const coarse = matchMedia('(pointer: coarse)').matches, low = lowDetail(params, { coarse });   // M-07c: уровень «низкий»
+  setAO(wantAO(params, { webgl2: renderer.capabilities.isWebGL2, coarse, low }));
+  buildEngine(low);
   buildEffects();
   nodesList.forEach(n => n.traverse(o => { if (o.isMesh) pickables.push(o); }));
   sim.theta = 25 * DEG;

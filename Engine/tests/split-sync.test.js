@@ -102,6 +102,7 @@ const CHANGED = {
   'render/parts/pistons.js': 'M-07c',
   'render/parts/valvetrain.js': 'M-07c',
   'render/parts/sparks.js': 'M-07c',
+  'render/parts/nodes.js': 'M-07c',
   'render/scene.js': 'M-07a',
   'render/materials.js': 'M-07a',
   'render/parts/geometry.js': 'M-07a',
