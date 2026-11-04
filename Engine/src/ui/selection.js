@@ -1,12 +1,14 @@
 /* Выбор деталей: pick() — деталь под указателем, select(), isolate(), подсветка при наведении setHover().
  * M-02c: подраздел «selection / hover / isolation» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
+ * M-05b: фишки деталей сообщают выбор через aria-pressed; у кнопки «Изолировать» значок и клавиша (isolateLabel).
  */
 import { camera, cutPlane } from '../render/scene.js';
 import { ui, raycaster, pickables, el } from './state.js';
 import { boundsWith } from './explode.js';
 import { fitIfNeeded, focusOn } from './camera.js';
 import { openInfo, closeInfo } from './info.js';
+import { isolateLabel } from './icons.js';
 
 /* ---------- selection / hover / isolation ---------- */
 function pick() {
@@ -28,12 +30,12 @@ function pick() {
 function select(node, focus = true) {
   ui.selected = node;
   if (node) { openInfo(node); if (focus) focusOn(node); } else closeInfo();
-  Object.entries(el.chips).forEach(([k, c]) => c.classList.toggle('active', !!node && node.userData.key === k));
+  Object.entries(el.chips).forEach(([k, c]) => c.setAttribute('aria-pressed', !!node && node.userData.key === k));
 }
 function isolate(node) {
   if (!node || ui.isolated === node) { ui.isolated = null; el.isoBar.classList.remove('on'); }
   else { ui.isolated = node; el.isoName.textContent = node.userData.info.short; el.isoBar.classList.add('on'); select(node, false); focusOn(node); }
-  el.btnIsolate.textContent = ui.isolated && ui.isolated === ui.selected ? 'Показать всё' : 'Изолировать';
+  el.btnIsolate.innerHTML = isolateLabel(!!ui.isolated && ui.isolated === ui.selected);
   Object.entries(el.chips).forEach(([k, c]) => c.classList.toggle('ghost', !!ui.isolated && ui.isolated.userData.key !== k));
   if (!ui.isolated) fitIfNeeded(boundsWith({}));
 }

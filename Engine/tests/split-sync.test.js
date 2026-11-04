@@ -96,9 +96,15 @@ const CHANGED = {
   'render/scene.js': 'M-07a',
   'render/materials.js': 'M-07a',
   'render/parts/geometry.js': 'M-07a',
-  'ui/controls.js': 'M-07a',
+  'ui/controls.js': 'M-07a, M-05b',
   'ui/charts/timing.js': 'M-05a',
-  'ui/charts/pv.js': 'M-05a',
+  'ui/charts/pv.js': 'M-05a, M-05b',
+  'ui/view.js': 'M-05b',
+  'ui/camera.js': 'M-05b',
+  'ui/selection.js': 'M-05b',
+  'ui/info.js': 'M-05b',
+  'ui/steps.js': 'M-05b',
+  'ui/input.js': 'M-05b',
 };
 const cut = (s, a, b) => {
   const i = s.indexOf(a); assert.ok(i >= 0, `нет «${a}»`); assert.equal(s.indexOf(a, i + 1), -1, `«${a}» встречается дважды`);

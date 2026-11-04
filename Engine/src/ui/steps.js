@@ -2,6 +2,7 @@
  * M-02c: из подразделов «explode / steps» и «step UI / sliders» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
  * gotoStep() и updateStepUI() вызывают друг друга (точки шагов), поэтому они в одном модуле.
+ * M-05b: счётчик шагов — строчными буквами в подзаголовке «По шагам»: «шаг 4 из 9», до начала — «не начата».
  */
 import { clamp } from '../sim/math.js';
 import { Ease, tweenTo } from '../anim/tween.js';
@@ -54,11 +55,11 @@ function updateStepUI() {
   });
   if (ui.stepMode && ui.step >= 0) {
     const s = STEPS[ui.step];
-    el.stepCount.textContent = 'ШАГ ' + (ui.step + 1) + ' / ' + STEPS.length;
+    el.stepCount.textContent = 'шаг ' + (ui.step + 1) + ' из ' + STEPS.length;
     el.stepTitle.innerHTML = '<span>' + (ui.step + 1) + '.</span> ' + s.title;
     el.stepNote.textContent = s.note;
   } else {
-    el.stepCount.textContent = ui.stepMode ? 'ШАГ 0 / ' + STEPS.length : 'ПО ШАГАМ';
+    el.stepCount.textContent = ui.stepMode ? 'шаг 0 из ' + STEPS.length : 'не начата';
     el.stepTitle.textContent = 'Двигатель собран';
     el.stepNote.innerHTML = 'Нажмите <b>Далее</b>: свечи → ремень ГРМ → распредвалы → коллекторы → ГБЦ → блок → поршни → коленвал.';
   }

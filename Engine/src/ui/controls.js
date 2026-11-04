@@ -5,6 +5,8 @@
  * проверяет tests/split-sync.test.js.
  * Кроме updateStepUI() — она в ui/steps.js.
  * M-07a: снимок экрана рисуется через renderFrame() (render/post.js) — с тем же AO, что на экране.
+ * M-05b: кнопка запуска — значок и текст (runLabel), переключатели сообщают состояние через aria-pressed; скрытие
+ * и раскладка панелей перенесены в ui/layout.js.
  */
 import { DEG } from '../config/engine-spec.js';
 import { audio } from '../audio/engine-audio.js';
@@ -15,6 +17,7 @@ import { sim } from '../render/kinematics.js';
 import { ui, effSpeed, el } from './state.js';
 import { meanProgress } from './explode.js';
 import { setView } from './view.js';
+import { runLabel } from './icons.js';
 
 /* ---------- step UI / sliders ---------- */
 function setRange(r, v, pct) { if (document.activeElement !== r || !ui.scrubbing) r.value = v; r.style.setProperty('--p', pct + '%'); }
@@ -30,7 +33,7 @@ function setRunning(v) {
   sim.running = v;
   el.btnRun.classList.toggle('on', v);
   el.btnRun.classList.toggle('accent', !v);
-  el.btnRun.innerHTML = v ? '⏸ Пауза <kbd>Space</kbd>' : '▶ Запустить <kbd>Space</kbd>';
+  el.btnRun.innerHTML = runLabel(v);
 }
 function toggleRun() {
   setRunning(!sim.running);
@@ -52,19 +55,7 @@ function toast(msg, ms = 3800) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.toast.classList.remove('on'), ms);
 }
-function togglePanels(force) {
-  const hide = force !== undefined ? force : !(el.hud.classList.contains('hid') && el.cycle.classList.contains('hid'));
-  setPanel(el.hud, el.hudOpen, hide); setPanel(el.cycle, el.cycleOpen, hide);
-}
-function setPanel(p, btn, hide) { p.classList.toggle('hid', hide); btn.classList.toggle('on', hide); layoutPanels(); }
-function layoutPanels() {
-  if (innerWidth <= 760) { el.cycle.classList.remove('compact'); return; }
-  el.cycle.classList.remove('compact');
-  if (!el.infocard.classList.contains('open') || el.cycle.classList.contains('hid')) return;
-  const natural = el.cycle.scrollHeight - el.pvWrap.clientHeight + el.pvWrap.scrollHeight + 16, cardTop = innerHeight - 16 - el.infocard.offsetHeight;
-  if (natural > cardTop - 10) el.cycle.classList.add('compact');
-}
-function setToggle(btn, on) { btn.classList.toggle('act', on); }
+function setToggle(btn, on) { btn.classList.toggle('act', on); btn.setAttribute('aria-pressed', on); }
 function screenshot() {
   renderFrame();
   const url = renderer.domElement.toDataURL('image/png');
@@ -78,4 +69,4 @@ function screenshot() {
   toast('Снимок сохранён: ' + a.download, 2600);
 }
 
-export { setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, togglePanels, setPanel, layoutPanels, setToggle, screenshot };
+export { setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot };

@@ -1,17 +1,27 @@
-/* Opus Engine — токены оформления модульной версии (П-1, 14_M05). Имена — из навыка design-system.
- * M-05a: значения равны прежним значениям интерфейса, поэтому снимки совпадают с main попиксельно.
- * Значения design-system (--opus-bg #0b0e13, --opus-surface .74, --radius-lg 18px …) вводятся в M-05b вместе с новой разметкой.
- * Старые имена (--bg, --glass, --stroke, --txt, --muted, --accent, --accent-2, --c-*, --radius) — псевдонимы в app.css. */
+/* Opus Engine — токены оформления модульной версии (П-1, 14_M05). Имена и значения — из навыка design-system.
+ * M-05a ввёл файл со значениями прежнего интерфейса; M-05b ставит значения design-system вместе с новой разметкой
+ * (верхняя панель, боковые панели, лента времени). Каждый токен используется в app.css (tests/styles.test.js). */
 :root{
-  --opus-bg:#0f1115;
-  --opus-surface:rgba(19,23,30,.62);
-  --opus-line:rgba(255,255,255,.09);
-  --opus-text:#e8edf5;
-  --opus-text-muted:#93a0b1;
+  --opus-bg:#0b0e13;
+  --opus-surface:rgb(16 20 28 / .74);
+  --opus-surface-strong:rgb(16 20 28 / .92);
+  --opus-surface-raised:rgb(255 255 255 / .05);
+  --opus-line:rgb(255 255 255 / .10);
+  --opus-line-strong:rgb(255 255 255 / .18);
+  --opus-text:#e9eef6;
+  --opus-text-muted:#9aa6b6;
   --opus-accent:#4da3ff;
   --opus-accent-2:#ffb454;
+  --opus-danger:#ff6b6b;
+  --opus-ok:#5fd39a;
   --stroke-intake:#4da3ff; --stroke-compression:#a78bfa; --stroke-power:#ff8a3d; --stroke-exhaust:#9aa3ad;
-  --radius-lg:16px;
-  --font-ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  --font-mono:ui-monospace,Menlo,Consolas,monospace;
+  --font-ui:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --fs-xs:.75rem; --fs-sm:.8125rem; --fs-md:.9375rem; --fs-lg:1.125rem; --fs-xl:1.5rem;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:18px;
+  --shadow-panel:0 18px 50px rgb(0 0 0 / .45), inset 0 1px 0 rgb(255 255 255 / .05);
+  --dur-fast:120ms; --dur-base:220ms; --ease:cubic-bezier(.2,.8,.2,1);
+  --hit:44px;
+  --focus-ring:0 0 0 2px var(--opus-bg), 0 0 0 4px var(--opus-accent);
 }

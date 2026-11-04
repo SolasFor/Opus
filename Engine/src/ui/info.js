@@ -1,6 +1,8 @@
 /* Карточка детали: openInfo(), closeInfo() и блок «Сейчас» с живыми показаниями — liveRows(), updateLive().
  * M-02c: подраздел «info card» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
+ * M-05b: карточка — раздел «Деталь» правой панели: при выборе детали раздел раскрывается, а панель показывается
+ * (на планшете — правая шторка). Прежнего сжатия панели под карточкой (layoutPanels) больше нет.
  */
 import { DEG, FIRE_DEG, CRANK_R, ROD_L, CAM_LIFT, SPARK_ADV } from '../config/engine-spec.js';
 import { mod } from '../sim/math.js';
@@ -10,7 +12,8 @@ import { volumeAt, pressureAt } from '../sim/thermo.js';
 import { R_CRANK_SPR, IDLER, BASE_RPM, STROKES } from '../render/world.js';
 import { sim, cycDeg, phaseOf } from '../render/kinematics.js';
 import { ui, effSpeed, el } from './state.js';
-import { layoutPanels } from './controls.js';
+import { revealPanel, setSection } from './layout.js';
+import { isolateLabel } from './icons.js';
 
 /* ---------- info card ---------- */
 let liveTimer = 0;
@@ -23,12 +26,13 @@ function openInfo(node) {
   info.specs.forEach(([k, v]) => el.infoSpecs.insertAdjacentHTML('beforeend', `<div class="spec"><span>${k}</span><b>${v}</b></div>`));
   if (info.specs.some(([, v]) => v.includes('*'))) el.infoSpecs.insertAdjacentHTML('beforeend', '<div class="spec"><span>* иллюстративное значение</span></div>');
   el.infoSpecs.insertAdjacentHTML('beforeend', '<div class="spec"><span>Учебная модель: справочные значения иллюстративные</span></div>');
-  el.btnIsolate.textContent = ui.isolated === node ? 'Показать всё' : 'Изолировать';
+  el.btnIsolate.innerHTML = isolateLabel(ui.isolated === node);
   updateLive(true);
   el.infocard.classList.add('open');
-  layoutPanels();
+  setSection('card', true);
+  revealPanel('cycle');
 }
-function closeInfo() { el.infocard.classList.remove('open'); el.infoLive.textContent = ''; layoutPanels(); }
+function closeInfo() { el.infocard.classList.remove('open'); el.infoLive.textContent = ''; }
 function liveRows(key) {
   const c = ui.pvCyl, phi = phaseOf(c), st = STROKES[strokeOf(phi)].name;
   const rpm = Math.round(effSpeed() * BASE_RPM * (sim.running ? 1 : 0));

@@ -2,6 +2,7 @@
  * и resetView(), фокус на детали focusOn().
  * M-02c: подраздел «camera» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
+ * M-05b: предустановки — пункты меню «Камера» (#camMenu, aria-checked у выбранной).
  */
 import * as THREE from 'three';
 import { DEG } from '../config/engine-spec.js';
@@ -40,7 +41,7 @@ const CAM_DIRS = { front: V3(0, 0.16, 1), side: V3(1, 0.18, 0.05), top: V3(0.001
 function cameraPreset(name) {
   ui.lastInteract = performance.now();
   frameBox(boundsWith({}), 1.1, 0, CAM_DIRS[name]);
-  document.querySelectorAll('#camRow .btn').forEach(b => b.classList.toggle('act', b.dataset.cam === name));
+  document.querySelectorAll('#camMenu [data-cam]').forEach(b => { const on = b.dataset.cam === name; b.classList.toggle('act', on); b.setAttribute('aria-checked', on); });
 }
 function resetView() { cameraPreset('iso'); }
 function focusOn(node) {
