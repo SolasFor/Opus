@@ -70,8 +70,8 @@ function createMaterials() {
     // краска с лаком (clearcoat): «апельсиновая корка» — в фактуре paint
     paintBlack:S(phys({ color: 0x18191b, metalness: 0.30, roughness: 0.50, clearcoat: 0.15, clearcoatRoughness: 0.45 }), 'paint'),   // M-07b: поддон, датчики
     paintHw:  S(phys({ color: 0xffffff, vertexColors: true, metalness: 0.20, roughness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.25 }), 'paint'),   // M-07b
-    paintBlue:S(phys({ color: 0x174f97, metalness: 0.25, roughness: 0.40, clearcoat: 0.8, clearcoatRoughness: 0.25 }), 'paint'),
-    paintRed: S(phys({ color: 0xc8361f, metalness: 0.10, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.3 }), 'paint'),
+    paintBlue:tint(0x174f97, 'paintHw'),   // M-07b: фильтр
+    paintRed: tint(0xc8361f, 'paintHw'),   // M-07b: ручка щупа
     pipe:     S(std({ color: 0xffffff, map: heatTint, emissive: 0x000000, emissiveMap: heatGlow, metalness: 1.00, roughness: 0.36 }), 'castFine'),
     pipe2:    S(std({ color: 0x8e9196, metalness: 1.00, roughness: 0.42 }), 'castFine'),
     shield:   S(std({ color: 0xaeb2b6, metalness: 1.00, roughness: 0.40 }), 'shield'),   // M-07b: штампованный теплоэкран
