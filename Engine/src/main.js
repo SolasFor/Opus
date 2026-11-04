@@ -12,6 +12,9 @@
  * в src/render/; дословность проверяет tests/split-sync.test.js. cycDeg и phaseOf теперь в src/render/kinematics.js.
  * M-02c: раздел 10 (интерфейс) перенесён дословно в src/ui/; дословность проверяет tests/split-sync.test.js. В main.js —
  * корень композиции: связка модулей, цикл рендера и адаптивное разрешение, потеря контекста и dispose(), запуск.
+ * M-07a: кадр и снимок экрана рисует renderFrame() из src/render/post.js — с экранным затенением GTAO на уровне
+ * качества «высокое» (src/render/quality.js) или прежним renderer.render(); адаптивное разрешение выключает AO,
+ * если кадр медленный и при pixelRatio 1.
  */
 /* ============================================================================
  * ЧЕТЫРЁХТАКТНЫЙ ДВИГАТЕЛЬ — интерактивная 3D-разборка (рядная «четвёрка», DOHC 16V)
@@ -39,6 +42,8 @@ import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, i
 import { nodes, nodesList, buildEngine } from './render/parts/nodes.js';
 import { sim, cycDeg, phaseOf, updateKinematics } from './render/kinematics.js';
 import { buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
+import { setAO, aoOn, renderFrame, disposePost } from './render/post.js';
+import { SLOW_RUN, wantAO, slowRun } from './render/quality.js';
 import { ui, effSpeed, pickables, el } from './ui/state.js';
 import { meanProgress, applyExplode, smoothExplode } from './ui/explode.js';
 import { animateExplode, gotoStep } from './ui/steps.js';
@@ -98,7 +103,7 @@ setEffectsSource(ui, effSpeed);             // M-02b: эффекты такто�
 /* ----------------------------------------------------------------------------
  * 11. ЦИКЛ РЕНДЕРА
  * ------------------------------------------------------------------------- */
-const perf = { frames: 0, t0: performance.now(), fps: 60, good: 0, adaptive: !params.has('noadapt') };
+const perf = { frames: 0, t0: performance.now(), fps: 60, good: 0, slow: 0, adaptive: !params.has('noadapt') };
 let lastTheta = 0;
 function adapt() {
   perf.frames++;
@@ -111,13 +116,15 @@ function adapt() {
     if (perf.fps < 46 && pr > 1) { pr = Math.max(1, pr - 0.25); perf.good = 0; }
     else if (perf.fps > 58) { if (++perf.good >= 4 && pr < MAX_PR) { pr = Math.min(MAX_PR, pr + 0.25); perf.good = 0; } }
     else perf.good = 0;
+    perf.slow = aoOn() ? slowRun(perf.slow, perf.fps, pixelRatio) : 0;   // M-07a: медленно и при 1× — AO выключается
+    if (perf.slow >= SLOW_RUN) setAO(false);
     if (pr !== pixelRatio) {
       storePixelRatio(pr);                  // M-02b: pixelRatio объявлен в render/scene.js
       renderer.setPixelRatio(pr);
       onResize();
     }
   }
-  el.fps.textContent = Math.round(perf.fps) + ' fps · ' + pixelRatio.toFixed(2).replace(/0$/, '') + '×';
+  el.fps.textContent = Math.round(perf.fps) + ' fps · ' + pixelRatio.toFixed(2).replace(/0$/, '') + '×' + (aoOn() ? ' · AO' : '');
 }
 function frame(dt) {
   updateTweens(dt);
@@ -148,7 +155,7 @@ function frame(dt) {
   updateLive(false);
   updateLabels();
 
-  renderer.render(scene, camera);
+  renderFrame();                            // M-07a: с AO или прежний renderer.render()
   adapt();
 }
 function loop() {
@@ -211,6 +218,7 @@ function dispose() {
   }));
   res.forEach(r => r && r.dispose());
   if (audio.ctx) audio.ctx.close();
+  disposePost();                            // M-07a: буферы и материалы AO
   renderer.dispose();
   renderer.forceContextLoss();              // внутренние объекты three.js (фон, материалы теней) уходят вместе с контекстом
 }
@@ -220,6 +228,7 @@ function dispose() {
  * ------------------------------------------------------------------------- */
 function boot() {
   initScene();
+  setAO(wantAO(params, { webgl2: renderer.capabilities.isWebGL2, coarse: matchMedia('(pointer: coarse)').matches }));
   buildEngine();
   buildEffects();
   nodesList.forEach(n => n.traverse(o => { if (o.isMesh) pickables.push(o); }));
@@ -242,8 +251,8 @@ window.engine = {
   sim, ui, nodes, get renderer() { return renderer; }, get camera() { return camera; }, get controls() { return controls; },
   setView, toggleRun, setRunning, gotoStep, cameraPreset, select: k => select(k ? nodes[k] : null), isolate: k => isolate(k ? nodes[k] : null),
   setTheta: d => { sim.theta = d * DEG; }, phaseOf, pressureAt, frame, toggleLabels: () => el.btnLabels.click(),
-  explode: v => animateExplode(v), dispose, busy: () => tweens.size + (meanProgress() !== Math.round(meanProgress()) && !ui.stepMode ? 1 : 0), meanProgress, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
-    programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures })
+  explode: v => animateExplode(v), dispose, setAO, busy: () => tweens.size + (meanProgress() !== Math.round(meanProgress()) && !ui.stepMode ? 1 : 0), meanProgress, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+    programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, ao: aoOn() })
 };
 try { boot(); }
 catch (err) { console.error(err); window.__engFail('Ошибка при сборке сцены: ' + window.__engEsc(err && err.message ? err.message : err), ['reload']); }
