@@ -47,7 +47,7 @@ import { SLOW_RUN, wantAO, slowRun } from './render/quality.js';
 import { ui, effSpeed, pickables, el } from './ui/state.js';
 import { meanProgress, applyExplode, smoothExplode } from './ui/explode.js';
 import { animateExplode, gotoStep } from './ui/steps.js';
-import { tweenCamera, cameraPreset } from './ui/camera.js';
+import { tweenCamera, cameraPreset, homePosition } from './ui/camera.js';
 import { setView } from './ui/view.js';
 import { pick, select, isolate, setHover } from './ui/selection.js';
 import { updateLabels } from './ui/labels.js';
@@ -230,7 +230,7 @@ function boot() {
   frame(0.016);
   window.__engOk = true;
   if (!run.lost) window.__engScreen('ready');
-  tweenCamera(CAM_HOME.clone(), TGT_HOME.clone(), 2.3, 0.1);
+  tweenCamera(homePosition(), TGT_HOME.clone(), 2.3, 0.1);   // M-05b: стартовый кадр по свободной области (П-4)
   setTimeout(() => toast('Клик по детали — описание · Space — запуск · ? — все клавиши', 5200), 1600);
   loop();
 }

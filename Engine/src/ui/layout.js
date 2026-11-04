@@ -7,18 +7,30 @@
  * Скрытая панель получает класс hid и inert. Выбор детали показывает правую панель (revealPanel): там карточка.
  * Разделы .sec[data-sec] сворачиваются по заголовку, состояние хранится в localStorage (ключ opus.engine.sections).
  * Высота ленты передаётся в CSS как --tl-h: над лентой стоят шторки планшета и уведомление.
+ * Свободная область кадра (П-4) — freeArea(): между верхней панелью, видимыми боковыми панелями и лентой; после
+ * каждого изменения раскладки вызывается обработчик onFreeArea(fn) — fn(animate): плавно при показе и скрытии панелей,
+ * сразу при изменении размера окна.
  */
 import { el } from './state.js';
 import { setupCharts } from './charts/canvas.js';
+import { freeRect } from './free-area.js';
 
 const BREAK = { desktop: 1100, tablet: 760 };
 const SIDES_AT_START = { desktop: ['hud', 'cycle'], tablet: ['hud'], phone: [] };
 const SECTIONS_KEY = 'opus.engine.sections';
-const lay = { mode: '', open: new Set(), clean: false, sec: {} };
+const lay = { mode: '', open: new Set(), clean: false, sec: {}, free: null, onFree: null };
 
 const layoutMode = w => w >= BREAK.desktop ? 'desktop' : w >= BREAK.tablet ? 'tablet' : 'phone';
 const panelShown = id => !lay.clean && (id === 'timeline' || lay.open.has(id));
-function applyLayout() {
+function measureFree() {
+  const shown = id => panelShown(id) ? el[id] : null, L = shown('hud'), R = shown('cycle'), T = shown('timeline');
+  const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 12;
+  lay.free = freeRect(innerWidth, innerHeight, { top: el.appbar.offsetTop + el.appbar.offsetHeight, gap,
+    left: L ? L.offsetLeft + L.offsetWidth : null, right: R ? R.offsetLeft : null, bottom: T ? T.offsetTop : null });
+}
+const freeArea = () => lay.free || { l: 0, t: 0, r: innerWidth, b: innerHeight };
+const onFreeArea = fn => { lay.onFree = fn; };
+function applyLayout(animate = true) {
   for (const id of ['hud', 'cycle', 'timeline']) {
     const on = panelShown(id);
     el[id].classList.toggle('hid', !on);
@@ -34,11 +46,13 @@ function applyLayout() {
   root.classList.toggle('clean', lay.clean);
   root.dataset.layout = lay.mode;
   root.style.setProperty('--tl-h', el.timeline.offsetHeight + 'px');
+  measureFree();
+  if (lay.onFree) lay.onFree(animate);
 }
 function fitLayout() {
   const mode = layoutMode(innerWidth);
   if (mode !== lay.mode) { lay.mode = mode; lay.open = new Set(SIDES_AT_START[mode]); }
-  applyLayout();
+  applyLayout(false);
 }
 function togglePanels(force) {
   lay.clean = force !== undefined ? !!force : !lay.clean;
@@ -77,4 +91,4 @@ function initSections() {
   });
 }
 
-export { layoutMode, panelShown, fitLayout, togglePanels, toggleDrawer, revealPanel, sectionOpen, setSection, initSections };
+export { layoutMode, panelShown, freeArea, onFreeArea, fitLayout, togglePanels, toggleDrawer, revealPanel, sectionOpen, setSection, initSections };

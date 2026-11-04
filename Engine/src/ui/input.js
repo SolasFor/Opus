@@ -7,7 +7,8 @@
  * M-05b: новая разметка (верхняя панель, боковые панели, лента времени): меню «Камера» и справка — ui/menus.js,
  * раскладка панелей и сворачиваемые разделы — ui/layout.js. Esc закрывает по порядку: меню → справка → изоляция →
  * выбор; пока открыта справка, другие клавиши не действуют, кроме ? и Shift+/ (закрыть). Строки «Фаз» вместо диаграммы
- * на canvas — ui/phases.js: нажатие на строку выбирает цилиндр для p–V.
+ * на canvas — ui/phases.js: нажатие на строку выбирает цилиндр для p–V. Центр кадра камеры следует за свободной
+ * областью между панелями (ui/layout.js → ui/camera.js, П-4), в том числе при изменении размера окна.
  */
 import { DEG } from '../config/engine-spec.js';
 import { audio } from '../audio/engine-audio.js';
@@ -19,7 +20,7 @@ import { inPts, exPts } from '../render/effects/strokes.js';
 import { ui, el } from './state.js';
 import { meanProgress, boundsWith } from './explode.js';
 import { exitStepMode, animateExplode, nextStep, prevStep, updateStepUI } from './steps.js';
-import { frameBox, cameraPreset, resetView, focusOn } from './camera.js';
+import { frameBox, cameraPreset, resetView, applyViewShift, focusOn } from './camera.js';
 import { setView, cycleView, setCut } from './view.js';
 import { pick, select, isolate, setHover } from './selection.js';
 import { updateLive } from './info.js';
@@ -27,14 +28,14 @@ import { setupCharts } from './charts/canvas.js';
 import { initPhases } from './phases.js';
 import { buildLabels } from './labels.js';
 import { updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot } from './controls.js';
-import { fitLayout, togglePanels, toggleDrawer, initSections } from './layout.js';
+import { fitLayout, onFreeArea, togglePanels, toggleDrawer, initSections } from './layout.js';
 import { menuOpen, setMenu, toggleMenu, openHelp, closeHelp, toggleHelp, dropFocus } from './menus.js';
 
 let life;
 const setInputLifecycle = ctl => { life = ctl; };
 
 function initUI() {
-  ['explodeSlider', 'explodeVal', 'explodeHdr', 'btnAssemble', 'btnExplode', 'stepDots', 'stepCount', 'stepTitle', 'stepNote', 'btnPrev', 'btnNext',
+  ['appbar', 'explodeSlider', 'explodeVal', 'explodeHdr', 'btnAssemble', 'btnExplode', 'stepDots', 'stepCount', 'stepTitle', 'stepNote', 'btnPrev', 'btnNext',
    'cutRow', 'cutSlider', 'cutVal', 'btnCam', 'camMenu', 'btnReset', 'btnLabels', 'btnRotate', 'btnSound', 'btnShot', 'btnPanels',
    'drawerLeft', 'drawerRight', 'partChips', 'partCount', 'hud', 'cycle', 'timeline', 'fps', 'btnRun', 'btnSlow', 'speedSlider', 'speedVal',
    'angleSlider', 'angleVal', 'angleSub', 'angleStroke', 'btnDegBack', 'btnDegFwd', 'phases', 'tlBands', 'tlTicks', 'pv', 'pvTitle', 'pvVal',
@@ -90,6 +91,7 @@ function initUI() {
   el.drawerRight.addEventListener('click', () => toggleDrawer('cycle'));
   el.btnPanels.addEventListener('click', () => togglePanels());
   initSections();
+  onFreeArea(applyViewShift);               // П-4: центр кадра — в свободной области между панелями
   fitLayout();
   el.helpLink.addEventListener('click', openHelp);
   el.helpLink2.addEventListener('click', openHelp);
