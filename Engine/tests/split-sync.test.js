@@ -18,7 +18,8 @@
  *      и адаптивное разрешение (раздел 11), потеря контекста и dispose() (M-03), запуск и window.engine.
  * M-07a и дальше: модули из таблицы CHANGED изменены намеренно, после переноса (модуль → этап). Для них правило 4
  *      проверяет всё, кроме sha256 тела, и что тело действительно отличается от строк опоры: модуль, который снова
- *      совпал с опорой, из таблицы нужно убрать.
+ *      совпал с опорой, из таблицы нужно убрать. Модули из таблицы REMOVED удалены (модуль → этап и замена): файла
+ *      нет, его никто не импортирует, а main.js не объявляет заново его имена.
  * Импорты main.js и вынесенных из него модулей (anim, audio, render, ui):
  *   5) только three, three/addons/….js и пути внутри src/ с .js; main.js никто не импортирует; anim/ и audio/
  *      не импортируют render/ и ui/, render/ не импортирует ui/; циклов нет;
@@ -97,7 +98,6 @@ const CHANGED = {
   'render/materials.js': 'M-07a',
   'render/parts/geometry.js': 'M-07a',
   'ui/controls.js': 'M-07a, M-05b',
-  'ui/charts/timing.js': 'M-05a',
   'ui/charts/pv.js': 'M-05a, M-05b',
   'ui/view.js': 'M-05b',
   'ui/camera.js': 'M-05b',
@@ -105,6 +105,11 @@ const CHANGED = {
   'ui/info.js': 'M-05b',
   'ui/steps.js': 'M-05b',
   'ui/input.js': 'M-05b',
+  'ui/charts/canvas.js': 'M-05b',
+};
+// M-05b и дальше: модуль → [этап, чем заменён, имена верхнего уровня, которые он объявлял]
+const REMOVED = {
+  'ui/charts/timing.js': ['M-05b', 'ui/phases.js', ['TL', 'drawTiming']],
 };
 const cut = (s, a, b) => {
   const i = s.indexOf(a); assert.ok(i >= 0, `нет «${a}»`); assert.equal(s.indexOf(a, i + 1), -1, `«${a}» встречается дважды`);
@@ -148,6 +153,16 @@ test('модули M-02a ничего не импортируют: ни three, �
 
 for (const [base, table, wires] of MOVES) for (const [file, [lines, hash]] of Object.entries(table)) {
   const changed = CHANGED[file];
+  if (REMOVED[file]) {
+    const [stage, by, names] = REMOVED[file];
+    test(`${file}: перенесён из строк main.js@${base} ${lines}, удалён в ${stage} (замена — ${by})`, () => {
+      assert.ok(!existsSync(new URL(`../src/${file}`, import.meta.url)), `${file}: файл ещё есть — уберите его из REMOVED`);
+      assert.ok(existsSync(new URL(`../src/${by}`, import.meta.url)), `${by}: нет файла`);
+      const mainTop = new Set(topNames(code(MAIN)));
+      for (const n of names) assert.ok(!mainTop.has(n), `main.js снова объявляет ${n} (из ${file})`);
+    });
+    continue;
+  }
   test(changed ? `${file}: перенесён из строк main.js@${base} ${lines}, изменён в ${changed}; в main.js их нет`
     : `${file}: строки main.js@${base} ${lines} перенесены дословно, в main.js их нет`, () => {
     const text = read(`../src/${file}`);
@@ -170,8 +185,9 @@ for (const [base, table, wires] of MOVES) for (const [file, [lines, hash]] of Ob
   });
 }
 
-test('CHANGED: только модули из таблиц RENDER и UI', () => {
+test('CHANGED и REMOVED: только модули из таблиц RENDER и UI, модуль — в одной из двух', () => {
   for (const file of Object.keys(CHANGED)) assert.ok(file in RENDER || file in UI, `${file}: нет в RENDER и UI`);
+  for (const file of Object.keys(REMOVED)) assert.ok((file in RENDER || file in UI) && !(file in CHANGED), `${file}: нет в RENDER и UI или есть в CHANGED`);
 });
 
 // ---------- импорты main.js и вынесенных модулей ----------

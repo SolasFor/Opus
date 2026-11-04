@@ -101,12 +101,12 @@
   <section class="sec" data-sec="phases">
     <h2 class="sec-hd"><button class="sec-h" type="button" aria-expanded="true" aria-controls="sec-phases"><svg class="i s chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="sec-t">Фазы цилиндров</span> <span class="val">1–3–4–2</span></button></h2>
     <div class="sec-b" id="sec-phases">
-      <canvas id="timing" class="chart" height="96"></canvas>
+      <div class="phases" id="phases" role="group" aria-label="Такты цилиндров за цикл 0–720°; строка выбирает цилиндр для p–V"></div>
       <div class="fire"><span>Порядок работы</span>
         <button class="chip c" type="button" data-c="0">1</button><i>–</i><button class="chip c" type="button" data-c="2">3</button><i>–</i><button class="chip c" type="button" data-c="3">4</button><i>–</i><button class="chip c" type="button" data-c="1">2</button>
       </div>
       <div class="legend">
-        <span class="s-in">Впуск</span><span class="s-co">Сжатие</span><span class="s-po">Рабочий ход</span><span class="s-ex">Выпуск</span>
+        <span class="s-in"><b>1</b>Впуск</span><span class="s-co"><b>2</b>Сжатие</span><span class="s-po"><b>3</b>Рабочий ход</span><span class="s-ex"><b>4</b>Выпуск</span>
       </div>
     </div>
   </section>
@@ -124,12 +124,13 @@
   <div class="tl-row">
     <button class="btn accent run" id="btnRun" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/></svg>Запустить <kbd>Space</kbd></button>
     <button class="btn tog" id="btnSlow" type="button" aria-pressed="false" title="Замедление ×0.2 · S"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5a8 8 0 1 1 16 0"/><path d="M12 16.5 8.5 12"/><path d="M4 20h16"/></svg>Замедл. <kbd>S</kbd></button>
-    <div class="readout"><b id="angleVal">0°</b><small id="angleSub">цикл 0°</small></div>
+    <div class="readout"><b id="angleVal">0°</b><small><span id="angleSub">цикл 0°</span><span id="angleStroke">Ц1 — рабочий ход</span></small></div>
     <div class="speed"><label class="label" for="speedSlider">Скорость</label><input type="range" id="speedSlider" min="0" max="100" step="1" value="57" aria-label="Скорость вращения" /><b class="val" id="speedVal">×1.0</b></div>
   </div>
-  <div class="tl-row">
+  <div class="tl-row tl-scrub">
     <button class="btn sm" id="btnDegBack" type="button" aria-label="Назад на 5°" title="−5° · клавиша , (Shift — 1°)">−5°</button>
-    <div class="scrub"><input type="range" id="angleSlider" class="warm" min="0" max="720" step="1" value="0" aria-label="Угол цикла" /></div>
+    <div class="scrub"><input type="range" id="angleSlider" class="warm" min="0" max="720" step="1" value="0" aria-label="Угол цикла" />
+      <div class="bands" id="tlBands" aria-hidden="true"></div><div class="ticks" id="tlTicks" aria-hidden="true"></div></div>
     <button class="btn sm" id="btnDegFwd" type="button" aria-label="Вперёд на 5°" title="+5° · клавиша . (Shift — 1°)">+5°</button>
   </div>
 </section>

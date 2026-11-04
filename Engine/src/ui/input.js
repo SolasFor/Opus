@@ -6,7 +6,8 @@
  * слушатели window и document снимаются в dispose().
  * M-05b: новая разметка (верхняя панель, боковые панели, лента времени): меню «Камера» и справка — ui/menus.js,
  * раскладка панелей и сворачиваемые разделы — ui/layout.js. Esc закрывает по порядку: меню → справка → изоляция →
- * выбор; пока открыта справка, другие клавиши не действуют, кроме ? и Shift+/ (закрыть).
+ * выбор; пока открыта справка, другие клавиши не действуют, кроме ? и Shift+/ (закрыть). Строки «Фаз» вместо диаграммы
+ * на canvas — ui/phases.js: нажатие на строку выбирает цилиндр для p–V.
  */
 import { DEG } from '../config/engine-spec.js';
 import { audio } from '../audio/engine-audio.js';
@@ -23,7 +24,7 @@ import { setView, cycleView, setCut } from './view.js';
 import { pick, select, isolate, setHover } from './selection.js';
 import { updateLive } from './info.js';
 import { setupCharts } from './charts/canvas.js';
-import { TL } from './charts/timing.js';
+import { initPhases } from './phases.js';
 import { buildLabels } from './labels.js';
 import { updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot } from './controls.js';
 import { fitLayout, togglePanels, toggleDrawer, initSections } from './layout.js';
@@ -36,7 +37,7 @@ function initUI() {
   ['explodeSlider', 'explodeVal', 'explodeHdr', 'btnAssemble', 'btnExplode', 'stepDots', 'stepCount', 'stepTitle', 'stepNote', 'btnPrev', 'btnNext',
    'cutRow', 'cutSlider', 'cutVal', 'btnCam', 'camMenu', 'btnReset', 'btnLabels', 'btnRotate', 'btnSound', 'btnShot', 'btnPanels',
    'drawerLeft', 'drawerRight', 'partChips', 'partCount', 'hud', 'cycle', 'timeline', 'fps', 'btnRun', 'btnSlow', 'speedSlider', 'speedVal',
-   'angleSlider', 'angleVal', 'angleSub', 'btnDegBack', 'btnDegFwd', 'timing', 'pv', 'pvTitle', 'pvVal',
+   'angleSlider', 'angleVal', 'angleSub', 'angleStroke', 'btnDegBack', 'btnDegFwd', 'phases', 'tlBands', 'tlTicks', 'pv', 'pvTitle', 'pvVal',
    'infocard', 'infoClose', 'infoTag', 'infoTitle', 'infoDesc', 'infoSpecs', 'infoLive', 'btnFocus', 'btnIsolate',
    'isoBar', 'isoName', 'btnUnIso', 'toast', 'flash', 'help', 'helpClose', 'helpLink', 'helpLink2', 'labels', 'tooltip'].forEach(id => { el[id] = $(id); });
   el.canvas = renderer.domElement;
@@ -125,11 +126,8 @@ function initUI() {
   };
   holdRepeat(el.btnDegBack, -1);
   holdRepeat(el.btnDegFwd, 1);
-  el.timing.addEventListener('click', e => {
-    const r = el.timing.getBoundingClientRect();
-    const i = Math.floor((e.clientY - r.top - TL.top) / TL.row);
-    if (i >= 0 && i < 4) setPvCyl(i);
-  });
+  initPhases();
+  el.phases.addEventListener('click', e => { const r = e.target.closest('.ph-row'); if (r) setPvCyl(+r.dataset.c); });
   el.fireChips.forEach(c => c.addEventListener('click', () => setPvCyl(+c.dataset.c)));
 
   // info card
@@ -191,6 +189,7 @@ function setPvCyl(i) {
   ui.pvCyl = i;
   el.pvTitle.textContent = 'p–V · цилиндр ' + (i + 1);
   el.fireChips.forEach(c => c.setAttribute('aria-pressed', +c.dataset.c === i));
+  el.phaseRows.forEach(r => r.setAttribute('aria-pressed', +r.dataset.c === i));
   updateLive(true);
 }
 function toggleSound() {
