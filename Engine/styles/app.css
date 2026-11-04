@@ -1,15 +1,16 @@
 /* Opus Engine — стили интерфейса модульной версии (Engine/index.html).
- * M-05a: перенесены из встроенного <style> index.html@17c9834 без правок, только без отступа в 2 пробела. */
+ * M-05a: перенесены из встроенного <style> index.html@17c9834 без отступа в 2 пробела. Правки после переноса перечислены
+ * в таблице EDITS теста Engine/tests/styles.test.js. Старые переменные (:root ниже) — псевдонимы токенов из tokens.css. */
 :root{
-  --bg:#0f1115;
-  --glass:rgba(19,23,30,.62);
-  --stroke:rgba(255,255,255,.09);
-  --txt:#e8edf5;
-  --muted:#93a0b1;
-  --accent:#4da3ff;
-  --accent-2:#ffb454;
-  --c-in:#4da3ff; --c-comp:#a78bfa; --c-pow:#ff8a3d; --c-ex:#9aa3ad;
-  --radius:16px;
+  --bg:var(--opus-bg);
+  --glass:var(--opus-surface);
+  --stroke:var(--opus-line);
+  --txt:var(--opus-text);
+  --muted:var(--opus-text-muted);
+  --accent:var(--opus-accent);
+  --accent-2:var(--opus-accent-2);
+  --c-in:var(--stroke-intake); --c-comp:var(--stroke-compression); --c-pow:var(--stroke-power); --c-ex:var(--stroke-exhaust);
+  --radius:var(--radius-lg);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;color:var(--txt);
@@ -70,7 +71,7 @@ input.warm{--accent:#ffb454}
 .btn.on:hover{filter:brightness(1.06)}
 .btn.sm{padding:6px 5px;font-size:11.2px;border-radius:9px}
 .btn.tog.act{background:rgba(77,163,255,.20);border-color:rgba(77,163,255,.55);color:#e2f1ff}
-.btn kbd,.seg kbd{font:600 9px/1 ui-monospace,Menlo,Consolas,monospace;opacity:.5;margin-left:4px}
+.btn kbd,.seg kbd{font:600 9px/1 var(--font-mono);opacity:.5;margin-left:4px}
 
 .seg{display:flex;padding:3px;gap:3px;border-radius:11px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.07);margin-top:8px}
 .seg button{flex:1;padding:7px 4px;border:0;border-radius:8px;background:transparent;color:#b9c5d4;font:inherit;font-size:11.8px;font-weight:650;cursor:pointer;transition:.18s}
@@ -112,7 +113,7 @@ input.warm{--accent:#ffb454}
   transition:opacity .35s ease,transform .35s cubic-bezier(.2,.8,.2,1)}
 #cycle .head{display:flex;align-items:center;gap:8px}
 #cycle .head h2{margin:0;font-size:13px;letter-spacing:.11em;text-transform:uppercase;color:#cfd9e6}
-#fps{font:600 10px/1 ui-monospace,Menlo,Consolas,monospace;color:#6f7d8f;margin-left:auto;white-space:nowrap}
+#fps{font:600 10px/1 var(--font-mono);color:#6f7d8f;margin-left:auto;white-space:nowrap}
 #cycle .icon-btn{margin-left:4px}
 .run-row{display:flex;gap:7px;margin-top:10px}
 #btnRun{flex:1.5;font-size:13px;padding:9px 8px}
@@ -183,7 +184,7 @@ canvas.chart{display:block;width:100%;border-radius:10px;background:rgba(0,0,0,.
 #help.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%)}
 #help h3{margin:0 0 12px;font-size:15px}
 #help .grid{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:7px 12px;font-size:12px;color:#b6c2d2;align-items:center}
-#help kbd{font:600 11px/1 ui-monospace,Menlo,Consolas,monospace;padding:4px 6px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf6;white-space:nowrap;justify-self:start}
+#help kbd{font:600 11px/1 var(--font-mono);padding:4px 6px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf6;white-space:nowrap;justify-self:start}
 #help p{margin:12px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
 
 /* ---------- loader ---------- */
@@ -196,7 +197,7 @@ canvas.chart{display:block;width:100%;border-radius:10px;background:rgba(0,0,0,.
 #loaderMsg{font-size:13px;color:#9aa7b8;letter-spacing:.02em;max-width:460px;line-height:1.6}
 #loaderMsg.err{color:#ffb1a6}
 #loaderMsg.err b{color:#fff}
-#loaderMsg code{font:12px ui-monospace,Menlo,Consolas,monospace;color:#e6edf6}
+#loaderMsg code{font:12px var(--font-mono);color:#e6edf6}
 #loaderAct{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 #loaderAct[hidden]{display:none}
 #loaderAct .btn{flex:none;padding:8px 18px;text-decoration:none}

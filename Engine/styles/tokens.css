@@ -1,0 +1,16 @@
+/* Opus Engine — токены оформления модульной версии (П-1, 14_M05). Имена — из навыка design-system.
+ * M-05a: значения равны прежним значениям интерфейса, поэтому снимки совпадают с main попиксельно.
+ * Значения design-system (--opus-bg #0b0e13, --opus-surface .74, --radius-lg 18px …) вводятся в M-05b вместе с новой разметкой.
+ * Старые имена (--bg, --glass, --stroke, --txt, --muted, --accent, --accent-2, --c-*, --radius) — псевдонимы в app.css. */
+:root{
+  --opus-bg:#0f1115;
+  --opus-surface:rgba(19,23,30,.62);
+  --opus-line:rgba(255,255,255,.09);
+  --opus-text:#e8edf5;
+  --opus-text-muted:#93a0b1;
+  --opus-accent:#4da3ff;
+  --opus-accent-2:#ffb454;
+  --stroke-intake:#4da3ff; --stroke-compression:#a78bfa; --stroke-power:#ff8a3d; --stroke-exhaust:#9aa3ad;
+  --radius-lg:16px;
+  --font-mono:ui-monospace,Menlo,Consolas,monospace;
+}
