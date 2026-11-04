@@ -27,24 +27,27 @@
  * 10. Интерфейс: разборка, шаги, вид/разрез, камера, подписи, карточки, диаграммы
  * 11. Цикл рендера, адаптивное разрешение, запуск
  * ========================================================================== */
-import * as THREE from 'three';
-import { DEG, FIRE_DEG, CRANK_R, ROD_L, CAM_LIFT, SPARK_ADV, VS, VC } from './config/engine-spec.js';
+import { DEG, FIRE_DEG, SPARK_ADV, VS, VC } from './config/engine-spec.js';
 import { clamp, mod } from './sim/math.js';
 import { strokeOf } from './sim/cycle.js';
-import { PIN_TDC } from './sim/kinematics.js';
 import { volumeAt, pressureAt } from './sim/thermo.js';
 import { tweens, updateTweens } from './anim/tween.js';
 import { audio, setSpeedSource } from './audio/engine-audio.js';
-import { R_CRANK_SPR, IDLER, BASE_RPM, CAM_HOME, TGT_HOME, STROKES, $ } from './render/world.js';
-import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, cutPlane, initScene, envRoom, envTarget, makeEnvironment, setLifecycle, storePixelRatio } from './render/scene.js';
+import { BASE_RPM, CAM_HOME, TGT_HOME, STROKES, $ } from './render/world.js';
+import { params, MAX_PR, pixelRatio, renderer, scene, camera, controls, clock, initScene, envRoom, envTarget, makeEnvironment, setLifecycle, storePixelRatio } from './render/scene.js';
 import { nodes, nodesList, buildEngine } from './render/parts/nodes.js';
 import { sim, cycDeg, phaseOf, updateKinematics } from './render/kinematics.js';
-import { inPts, exPts, fx, buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
-import { ui, effSpeed, raycaster, pickables, el } from './ui/state.js';
+import { inPts, exPts, buildEffects, updateEffects, setEffectsSource } from './render/effects/strokes.js';
+import { ui, effSpeed, pickables, el } from './ui/state.js';
 import { meanProgress, applyExplode, smoothExplode, boundsWith } from './ui/explode.js';
 import { exitStepMode, animateExplode, gotoStep, nextStep, prevStep, updateStepUI } from './ui/steps.js';
-import { tweenCamera, frameBox, fitIfNeeded, cameraPreset, resetView, focusOn } from './ui/camera.js';
+import { tweenCamera, frameBox, cameraPreset, resetView, focusOn } from './ui/camera.js';
 import { setView, cycleView, setCut } from './ui/view.js';
+import { pick, select, isolate, setHover } from './ui/selection.js';
+import { updateLive } from './ui/info.js';
+import { buildLabels, updateLabels } from './ui/labels.js';
+import { updateMaterials } from './ui/highlight.js';
+import { setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, togglePanels, setPanel, layoutPanels, setToggle, screenshot } from './ui/controls.js';
 
 /* ----------------------------------------------------------------------------
  * 1. КОНСТАНТЫ — мировые единицы: 1 ед. = 100 мм (соглашение модели) → src/render/world.js (M-02b)
@@ -87,89 +90,6 @@ import { setView, cycleView, setCut } from './ui/view.js';
  * ------------------------------------------------------------------------- */
 setSpeedSource(effSpeed);                   // M-02a: audio.fire() берёт текущую скорость отсюда
 setEffectsSource(ui, effSpeed);             // M-02b: эффекты тактов читают ui.isolated, ui.view и effSpeed()
-
-/* ---------- selection / hover / isolation ---------- */
-function pick() {
-  raycaster.setFromCamera(ui.pointer, camera);
-  pickables.forEach(m => { if (m.isInstancedMesh) m.boundingSphere = null; });
-  const hits = raycaster.intersectObjects(pickables, false);
-  let glass = null;
-  for (const h of hits) {
-    const n = h.object.userData.node;
-    if (!n || !h.object.visible) continue;
-    if (ui.isolated && ui.isolated !== n) continue;
-    const m = h.object.material;
-    if (m.userData.housing && ui.view === 'cut' && h.point.z > cutPlane.constant) continue;   // clipped away
-    if (n.userData.housing && ui.view === 'xray') { if (!glass) glass = n; continue; }
-    return n;
-  }
-  return glass;
-}
-function select(node, focus = true) {
-  ui.selected = node;
-  if (node) { openInfo(node); if (focus) focusOn(node); } else closeInfo();
-  Object.entries(el.chips).forEach(([k, c]) => c.classList.toggle('active', !!node && node.userData.key === k));
-}
-function isolate(node) {
-  if (!node || ui.isolated === node) { ui.isolated = null; el.isoBar.classList.remove('on'); }
-  else { ui.isolated = node; el.isoName.textContent = node.userData.info.short; el.isoBar.classList.add('on'); select(node, false); focusOn(node); }
-  el.btnIsolate.textContent = ui.isolated && ui.isolated === ui.selected ? 'Показать всё' : 'Изолировать';
-  Object.entries(el.chips).forEach(([k, c]) => c.classList.toggle('ghost', !!ui.isolated && ui.isolated.userData.key !== k));
-  if (!ui.isolated) fitIfNeeded(boundsWith({}));
-}
-function setHover(n) {
-  if (ui.hover === n) return;
-  ui.hover = n;
-  el.canvas.classList.toggle('pick', !!n);
-  if (n) {
-    el.tooltip.innerHTML = n.userData.info.name + '<i>клик — описание · двойной клик — изолировать</i>';
-    el.tooltip.classList.add('on');
-  } else el.tooltip.classList.remove('on');
-}
-
-/* ---------- info card ---------- */
-let liveTimer = 0;
-function openInfo(node) {
-  const info = node.userData.info;
-  el.infoTag.textContent = info.tag;
-  el.infoTitle.textContent = info.name;
-  el.infoDesc.textContent = info.desc;
-  el.infoSpecs.textContent = '';
-  info.specs.forEach(([k, v]) => el.infoSpecs.insertAdjacentHTML('beforeend', `<div class="spec"><span>${k}</span><b>${v}</b></div>`));
-  if (info.specs.some(([, v]) => v.includes('*'))) el.infoSpecs.insertAdjacentHTML('beforeend', '<div class="spec"><span>* иллюстративное значение</span></div>');
-  el.infoSpecs.insertAdjacentHTML('beforeend', '<div class="spec"><span>Учебная модель: справочные значения иллюстративные</span></div>');
-  el.btnIsolate.textContent = ui.isolated === node ? 'Показать всё' : 'Изолировать';
-  updateLive(true);
-  el.infocard.classList.add('open');
-  layoutPanels();
-}
-function closeInfo() { el.infocard.classList.remove('open'); el.infoLive.textContent = ''; layoutPanels(); }
-function liveRows(key) {
-  const c = ui.pvCyl, phi = phaseOf(c), st = STROKES[strokeOf(phi)].name;
-  const rpm = Math.round(effSpeed() * BASE_RPM * (sim.running ? 1 : 0));
-  const xmm = (PIN_TDC - sim.pistonY[c]) * 100;   // мм от ВМТ, 0…72: 1 ед. = 100 мм (D-05)
-  switch (key) {
-    case 'crankshaft': return [['Угол поворота', Math.round(mod(sim.theta / DEG, 360)) + '°'], ['Угол в цикле', Math.round(cycDeg()) + '° из 720°'], ['Обороты модели', rpm + ' об/мин']];
-    case 'pistons': return [[`Цилиндр ${c + 1}`, st], ['От ВМТ', xmm.toFixed(1) + ' мм'], ['Давление над поршнем', pressureAt(phi).toFixed(1) + ' бар']];
-    case 'rods': { const a = Math.asin(CRANK_R * Math.sin((sim.theta - FIRE_DEG[c] * DEG)) / ROD_L) / DEG; return [[`Наклон шатуна, ц. ${c + 1}`, a.toFixed(1) + '°'], ['Такт', st]]; }
-    case 'valvetrain': return [[`Впускные, ц. ${c + 1}`, (sim.intakeLift[c] * CAM_LIFT * 100).toFixed(1) + ' мм'], [`Выпускные, ц. ${c + 1}`, (sim.exhaustLift[c] * CAM_LIFT * 100).toFixed(1) + ' мм'], ['Угол распредвала', Math.round(mod(sim.theta / DEG / 2, 360)) + '°']];
-    case 'sparks': { let best = 1e9, who = 0; for (let i = 0; i < 4; i++) { const d = mod(FIRE_DEG[i] - SPARK_ADV - cycDeg(), 720); if (d < best) { best = d; who = i; } } return [['Следующая искра', `цилиндр ${who + 1}`], ['Через', Math.round(best) + '° поворота']]; }
-    case 'intake': { const open = [0, 1, 2, 3].filter(i => sim.intakeLift[i] > 0.02).map(i => i + 1); return [['Открыт впуск', open.length ? 'ц. ' + open.join(', ') : '—'], ['Давление на впуске (модель)', '0,92 бар']]; }
-    case 'exhaust': { const open = [0, 1, 2, 3].filter(i => sim.exhaustLift[i] > 0.02).map(i => i + 1); return [['Открыт выпуск', open.length ? 'ц. ' + open.join(', ') : '—'], ['Нагрев (модель)', Math.round(180 + sim.heat * 720) + ' °C']]; }
-    case 'head': return [[`Камера ц. ${c + 1}`, st], ['Давление', pressureAt(phi).toFixed(1) + ' бар'], ['Объём', volumeAt(phi).toFixed(0) + ' см³']];
-    case 'belt': return [['Распредвалы', Math.round(mod(sim.theta / DEG / 2, 360)) + '° (½ коленвала)'], ['Ролик', 'вращается ×' + (R_CRANK_SPR / IDLER.r).toFixed(2)]];
-    case 'block': return [0, 1, 2, 3].map(i => [`Цилиндр ${i + 1}`, STROKES[strokeOf(phaseOf(i))].name]);
-  }
-  return [];
-}
-function updateLive(force) {
-  if (!ui.selected || !el.infocard.classList.contains('open')) return;
-  const now = performance.now();
-  if (!force && now - liveTimer < 120) return;
-  liveTimer = now;
-  const rows = liveRows(ui.selected.userData.key);
-  el.infoLive.innerHTML = rows.length ? '<div class="ttl">Сейчас</div>' + rows.map(([k, v]) => `<div class="spec"><span>${k}</span><b>${v}</b></div>`).join('') : '';
-}
 
 /* ---------- HUD charts (canvas 2D) ---------- */
 const charts = { dpr: 1, pvBg: null, trail: [] };
@@ -260,131 +180,6 @@ function drawPV() {
   g.beginPath(); g.arc(x, y, 3.6, 0, Math.PI * 2); g.fill();
   g.strokeStyle = col; g.lineWidth = 2; g.stroke();
   el.pvVal.textContent = p.toFixed(1) + ' бар · ' + STROKES[strokeOf(phi)].name.toLowerCase();
-}
-
-/* ---------- labels ---------- */
-const labelEls = new Map();
-function buildLabels() {
-  nodesList.forEach(n => {
-    const d = document.createElement('div');
-    d.className = 'lbl';
-    d.innerHTML = `<span>${n.userData.info.short}</span><i></i>`;
-    d.style.opacity = 0;
-    d.querySelector('span').addEventListener('click', () => select(n));
-    el.labels.appendChild(d);
-    labelEls.set(n, d);
-  });
-}
-const _a = new THREE.Vector3();
-function updateLabels() {
-  const W = innerWidth, H = innerHeight;
-  labelEls.forEach((d, n) => {
-    const visible = ui.labels && n.userData.opacity > 0.3 && n.visible;
-    if (!visible) { if (d.style.opacity !== '0') d.style.opacity = 0; return; }
-    _a.copy(n.userData.anchor);
-    n.localToWorld(_a);
-    _a.project(camera);
-    if (_a.z > 1) { d.style.opacity = 0; return; }
-    const x = (_a.x * 0.5 + 0.5) * W, y = (-_a.y * 0.5 + 0.5) * H;
-    d.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-100%)`;
-    d.style.opacity = 1;
-    d.classList.toggle('hl', ui.hover === n);
-    d.classList.toggle('sel', ui.selected === n);
-  });
-}
-
-/* ---------- per-node materials: ghosting, x-ray, glow, exhaust heat ---------- */
-const HL_HOVER = new THREE.Color(0x2c7dff), HL_SEL = new THREE.Color(0xff9a2e), HEAT = new THREE.Color(1.0, 0.30, 0.07);
-const _gc = new THREE.Color();
-function updateMaterials(dt) {
-  const k = 1 - Math.exp(-dt * 10), kg = 1 - Math.exp(-dt * 14);
-  for (const n of nodesList) {
-    const ud = n.userData;
-    let o = 1;
-    if (ud.housing && ui.view === 'xray') o = 0.13;
-    if (ui.isolated && ui.isolated !== n) o = Math.min(o, 0.05);
-    ud.opacity += (o - ud.opacity) * k;
-    if (Math.abs(o - ud.opacity) < 0.002) ud.opacity = o;
-    let gt = 0;
-    if (ui.selected === n) { gt = ui.hover === n ? 0.45 : 0.2; ud.glowColor.copy(HL_SEL); }
-    else if (ui.hover === n) { gt = 0.5; ud.glowColor.copy(HL_HOVER); }
-    ud.glow += (gt - ud.glow) * kg;
-    if (Math.abs(gt - ud.glow) < 0.002) ud.glow = gt;
-    n.visible = ud.opacity > 0.015;
-    for (const m of ud.mats.values()) {
-      const op = m.userData.baseOpacity * ud.opacity;
-      const tr = op < 0.995;
-      if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; }
-      m.opacity = op;
-      m.depthWrite = !tr;
-      _gc.copy(m.userData.baseEmissive);
-      if (m.userData.isPipe) { const h = sim.heat * 1.5 * fx.exhaust; _gc.r += HEAT.r * h; _gc.g += HEAT.g * h; _gc.b += HEAT.b * h; }
-      _gc.r += ud.glowColor.r * ud.glow; _gc.g += ud.glowColor.g * ud.glow; _gc.b += ud.glowColor.b * ud.glow;
-      m.emissive.copy(_gc);
-    }
-  }
-}
-
-/* ---------- step UI / sliders ---------- */
-function setRange(r, v, pct) { if (document.activeElement !== r || !ui.scrubbing) r.value = v; r.style.setProperty('--p', pct + '%'); }
-function speedFromSlider(v) { return 0.05 * Math.pow(200, v / 100); }
-function updateSpeedUI() {
-  const v = +el.speedSlider.value;
-  sim.speed = speedFromSlider(v);
-  el.speedSlider.style.setProperty('--p', v + '%');
-  const e = effSpeed();
-  el.speedVal.textContent = '×' + (e < 1 ? e.toFixed(2) : e.toFixed(1)) + ' · ' + (e * BASE_RPM < 10 ? (e * BASE_RPM).toFixed(1) : Math.round(e * BASE_RPM)) + ' об/мин';
-}
-function setRunning(v) {
-  sim.running = v;
-  el.btnRun.classList.toggle('on', v);
-  el.btnRun.classList.toggle('accent', !v);
-  el.btnRun.innerHTML = v ? '⏸ Пауза <kbd>Space</kbd>' : '▶ Запустить <kbd>Space</kbd>';
-}
-function toggleRun() {
-  setRunning(!sim.running);
-  if (sim.running) {
-    audio.update(true, effSpeed());
-    if (ui.firstRun && ui.view === 'solid') { setView('cut'); toast('Включил разрез, чтобы были видны такты. Вид меняется клавишей X'); }
-    else if (meanProgress() > 0.15) toast('Механизм крутится и в разборке, а горение видно только в собранном двигателе');
-    ui.firstRun = false;
-  }
-}
-function nudgeCrank(deg) {
-  if (sim.running) setRunning(false);
-  sim.theta += deg * DEG;
-}
-let toastTimer = 0;
-function toast(msg, ms = 3800) {
-  el.toast.textContent = msg;
-  el.toast.classList.add('on');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.toast.classList.remove('on'), ms);
-}
-function togglePanels(force) {
-  const hide = force !== undefined ? force : !(el.hud.classList.contains('hid') && el.cycle.classList.contains('hid'));
-  setPanel(el.hud, el.hudOpen, hide); setPanel(el.cycle, el.cycleOpen, hide);
-}
-function setPanel(p, btn, hide) { p.classList.toggle('hid', hide); btn.classList.toggle('on', hide); layoutPanels(); }
-function layoutPanels() {
-  if (innerWidth <= 760) { el.cycle.classList.remove('compact'); return; }
-  el.cycle.classList.remove('compact');
-  if (!el.infocard.classList.contains('open') || el.cycle.classList.contains('hid')) return;
-  const natural = el.cycle.scrollHeight - el.pvWrap.clientHeight + el.pvWrap.scrollHeight + 16, cardTop = innerHeight - 16 - el.infocard.offsetHeight;
-  if (natural > cardTop - 10) el.cycle.classList.add('compact');
-}
-function setToggle(btn, on) { btn.classList.toggle('act', on); }
-function screenshot() {
-  renderer.render(scene, camera);
-  const url = renderer.domElement.toDataURL('image/png');
-  const a = document.createElement('a');
-  const d = new Date(), z = n => String(n).padStart(2, '0');
-  a.download = `dvigatel-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.png`;
-  a.href = url;
-  document.body.appendChild(a); a.click(); a.remove();
-  el.flash.style.transition = 'none'; el.flash.style.opacity = 0.55;
-  requestAnimationFrame(() => { el.flash.style.transition = 'opacity .45s'; el.flash.style.opacity = 0; });
-  toast('Снимок сохранён: ' + a.download, 2600);
 }
 
 function initUI() {

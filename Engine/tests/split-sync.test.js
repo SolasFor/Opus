@@ -74,6 +74,11 @@ const UI = {
   'ui/steps.js': ['118,149p;464,485p', 'cfe113ba4adb778a026629c4aa8323c660b6821aa5a101ab57b97819ee3c34dc'],
   'ui/camera.js': ['165,204p', 'c1cf0ba6b111a90a9ba7aff8e7a14c39853071052218ca6d0bb0755b718ccbb2'],
   'ui/view.js': ['206,223p', '02ab8c84b8af1fc98457b131f3d776fd41aa387d2af51d510170ffdd91748ee0'],
+  'ui/selection.js': ['225,262p', '1afe9e87781836c17ffa13b905fa2b630d5718e15344f2bc0b1952b3ea21c8d3'],
+  'ui/info.js': ['264,306p', '66f99a4a3f388fd4356d6ec5863b4031ffc236022abca4ecd773ce44ab9fc598'],
+  'ui/labels.js': ['399,428p', '0a458997666772884e622ddd400469ee045b2cecd13fb832b1318ba7e6061d09'],
+  'ui/highlight.js': ['430,460p', '276f6e50b1fdfc8244adee2f5eac98c06ece846918cdb485592135ebfcb1b281'],
+  'ui/controls.js': ['462,463p;486,544p', 'b1b77ede7d7dc063856506ad727d3222771bbeb9f9896d0144aba85e3e4a4b0b'],
 };
 const WIRING_C = {
 };
