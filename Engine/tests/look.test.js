@@ -56,7 +56,7 @@ test('surface: нет фрагмента шейдера или вида факт
     if (c === CHUNKS[0]) sh.vertexShader = sh.vertexShader.replace(c, ''); else sh.fragmentShader = sh.fragmentShader.replace(c, '');
     assert.throws(() => patchShader(sh, 'cast'), new RegExp(`surface: нет фрагмента шейдера ${c}`));
   }
-  for (const kind of ['shield', 'toString', undefined]) assert.throws(() => patchShader(shader(), kind), /surface: неизвестный вид фактуры/);
+  for (const kind of ['glass', 'toString', undefined]) assert.throws(() => patchShader(shader(), kind), /surface: неизвестный вид фактуры/);
 });
 
 test('surface: applySurface() дополняет onBeforeCompile и ключ программы; без WebGL2 шейдер не меняет', () => {
@@ -76,7 +76,7 @@ test('surface: applySurface() дополняет onBeforeCompile и ключ п�
     assert.deepEqual(calls, [[sh1, WEBGL1, false]], `${kind}: WebGL1 — без вставки`);
     assert.deepEqual(sh1, shader());
   }
-  for (const surf of [undefined, 'shield', 'toString']) {
+  for (const surf of [undefined, 'glass', 'toString']) {
     const m = mat(surf), { onBeforeCompile, customProgramCacheKey } = m;
     assert.equal(applySurface(m), false, String(surf));
     assert.equal(m.onBeforeCompile, onBeforeCompile); assert.equal(m.customProgramCacheKey, customProgramCacheKey);
@@ -99,6 +99,8 @@ const walk = d => readdirSync(new URL(d, SRC), { withFileTypes: true })
 const MATS = read('../src/render/materials.js');
 const BLOCK = MATS.slice(MATS.indexOf('  M = {\n'), MATS.indexOf('\n  };\n', MATS.indexOf('  M = {\n')));
 const KEYS = [...BLOCK.matchAll(/^ {4}([\w$]+):/gm)].map(m => m[1]);
+// M-07b: общие материалы крепежа и мелочи — с цветом вершин
+const INTO = [...BLOCK.matchAll(/^ {4}([\w$]+): *S\((?:std|phys)\(\{[^{}]*vertexColors: true[^{}]*\}\)/gm)].map(m => m[1]);
 
 test('материалы: каждый M.x, который упоминает код, объявлен; вид фактуры — из KINDS', () => {
   assert.ok(KEYS.length >= 20, 'материалы M');
@@ -108,6 +110,8 @@ test('материалы: каждый M.x, который упоминает к
   assert.equal(lines.length, KEYS.length);
   for (const l of lines) {
     const s = l.match(/^ {4}([\w$]+): *S\((?:std|phys)\(\{[^{}]*\}\), '([\w$]+)'\),?(?: *\/\/.*)?$/);
+    const t = l.match(/^ {4}([\w$]+): *tint\(0x[0-9a-f]{6}(?:, '([\w$]+)')?\),?(?: *\/\/.*)?$/);   // M-07b: ключ-цвет
+    if (t) { assert.ok(INTO.includes(t[2] || 'hw'), `M.${t[1]}: цвет пишется в ${t[2]}, а не в общий материал`); continue; }
     if (!s) { assert.match(l, /^ {4}ceramic: *phys\(/, `без фактуры — только керамика: ${l.trim()}`); continue; }
     assert.ok(s[2] in KINDS, `M.${s[1]}: вид фактуры ${s[2]} не из KINDS`);
   }
@@ -117,7 +121,7 @@ test('extrudeX и extrudeY сглаживают нормали до угла 38�
   const geo = read('../src/render/parts/geometry.js');
   assert.match(geo, /^const CREASE = 38 \* Math\.PI \/ 180;$/m);
   assert.match(geo, /^function smooth\(g\) \{ const r = toCreasedNormals\(g, CREASE\); if \(r !== g\) g\.dispose\(\); return r; \}$/m);
-  for (const f of ['extrudeX', 'extrudeY']) {
+  for (const f of ['extrudeX', 'extrudeY', 'extrudeZ', 'extrudeXb']) {   // M-07b: и новые выдавливания
     const body = geo.slice(geo.indexOf(`function ${f}(`), geo.indexOf('\n}\n', geo.indexOf(`function ${f}(`)));
     assert.match(body, /\n  return smooth\(g\);$/, f);
   }
