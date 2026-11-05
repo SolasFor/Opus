@@ -56,7 +56,7 @@ test('surface: нет фрагмента шейдера или вида факт
     if (c === CHUNKS[0]) sh.vertexShader = sh.vertexShader.replace(c, ''); else sh.fragmentShader = sh.fragmentShader.replace(c, '');
     assert.throws(() => patchShader(sh, 'cast'), new RegExp(`surface: нет фрагмента шейдера ${c}`));
   }
-  for (const kind of ['shield', 'toString', undefined]) assert.throws(() => patchShader(shader(), kind), /surface: неизвестный вид фактуры/);
+  for (const kind of ['glass', 'toString', undefined]) assert.throws(() => patchShader(shader(), kind), /surface: неизвестный вид фактуры/);
 });
 
 test('surface: applySurface() дополняет onBeforeCompile и ключ программы; без WebGL2 шейдер не меняет', () => {
@@ -76,7 +76,7 @@ test('surface: applySurface() дополняет onBeforeCompile и ключ п�
     assert.deepEqual(calls, [[sh1, WEBGL1, false]], `${kind}: WebGL1 — без вставки`);
     assert.deepEqual(sh1, shader());
   }
-  for (const surf of [undefined, 'shield', 'toString']) {
+  for (const surf of [undefined, 'glass', 'toString']) {
     const m = mat(surf), { onBeforeCompile, customProgramCacheKey } = m;
     assert.equal(applySurface(m), false, String(surf));
     assert.equal(m.onBeforeCompile, onBeforeCompile); assert.equal(m.customProgramCacheKey, customProgramCacheKey);
@@ -99,6 +99,8 @@ const walk = d => readdirSync(new URL(d, SRC), { withFileTypes: true })
 const MATS = read('../src/render/materials.js');
 const BLOCK = MATS.slice(MATS.indexOf('  M = {\n'), MATS.indexOf('\n  };\n', MATS.indexOf('  M = {\n')));
 const KEYS = [...BLOCK.matchAll(/^ {4}([\w$]+):/gm)].map(m => m[1]);
+// M-07b: общие материалы крепежа и мелочи — с цветом вершин
+const INTO = [...BLOCK.matchAll(/^ {4}([\w$]+): *S\((?:std|phys)\(\{[^{}]*vertexColors: true[^{}]*\}\)/gm)].map(m => m[1]);
 
 test('материалы: каждый M.x, который упоминает код, объявлен; вид фактуры — из KINDS', () => {
   assert.ok(KEYS.length >= 20, 'материалы M');
@@ -108,6 +110,8 @@ test('материалы: каждый M.x, который упоминает к
   assert.equal(lines.length, KEYS.length);
   for (const l of lines) {
     const s = l.match(/^ {4}([\w$]+): *S\((?:std|phys)\(\{[^{}]*\}\), '([\w$]+)'\),?(?: *\/\/.*)?$/);
+    const t = l.match(/^ {4}([\w$]+): *tint\(0x[0-9a-f]{6}(?:, '([\w$]+)')?\),?(?: *\/\/.*)?$/);   // M-07b: ключ-цвет
+    if (t) { assert.ok(INTO.includes(t[2] || 'hw'), `M.${t[1]}: цвет пишется в ${t[2]}, а не в общий материал`); continue; }
     if (!s) { assert.match(l, /^ {4}ceramic: *phys\(/, `без фактуры — только керамика: ${l.trim()}`); continue; }
     assert.ok(s[2] in KINDS, `M.${s[1]}: вид фактуры ${s[2]} не из KINDS`);
   }
@@ -117,7 +121,7 @@ test('extrudeX и extrudeY сглаживают нормали до угла 38�
   const geo = read('../src/render/parts/geometry.js');
   assert.match(geo, /^const CREASE = 38 \* Math\.PI \/ 180;$/m);
   assert.match(geo, /^function smooth\(g\) \{ const r = toCreasedNormals\(g, CREASE\); if \(r !== g\) g\.dispose\(\); return r; \}$/m);
-  for (const f of ['extrudeX', 'extrudeY']) {
+  for (const f of ['extrudeX', 'extrudeY', 'extrudeZ', 'extrudeXb']) {   // M-07b: и новые выдавливания
     const body = geo.slice(geo.indexOf(`function ${f}(`), geo.indexOf('\n}\n', geo.indexOf(`function ${f}(`)));
     assert.match(body, /\n  return smooth\(g\);$/, f);
   }
@@ -165,7 +169,8 @@ test('качество: AO выключается после SLOW_RUN медле
     assert.equal(run, want, `${fps} к/с при ${pr}×`);
   }
   const main = read('../src/main.js');
-  assert.ok(main.includes(`if (perf.fps < ${FPS_LOW} && pr > 1)`), 'порог FPS_LOW — тот же, при котором main.js снижает разрешение');
+  assert.match(main, /^ {4}perf\.ad = adaptPR\(\{ \.\.\.perf\.ad, pr: pixelRatio \}, perf\.fps, MAX_PR\);.*\n {4}const pr = perf\.ad\.pr;$/m, 'разрешение снижает adaptPR() (M-06b)');
+  assert.ok(read('../src/render/quality.js').includes('if (fps < FPS_LOW && pr > 1) {'), 'порог FPS_LOW — тот же, при котором adaptPR() снижает разрешение');
   assert.match(main, /^ {4}perf\.slow = aoOn\(\) \? slowRun\(perf\.slow, perf\.fps, pixelRatio\) : 0;.*\n {4}if \(perf\.slow >= SLOW_RUN\) setAO\(false\);$/m);
   assert.match(main, /^const perf = \{[^\n]*adaptive: !params\.has\('noadapt'\) \};$/m, '?noadapt выключает и адаптивное разрешение, и сброс AO');
 });
@@ -178,11 +183,11 @@ test('кадр и снимок экрана рисует renderFrame(); renderer
   const main = read('../src/main.js'), controls = read('../src/ui/controls.js');
   assert.match(fn(main, 'frame'), /\n  renderFrame\(\);/);
   assert.match(fn(controls, 'screenshot'), /^function screenshot\(\) \{\n  renderFrame\(\);\n  const url = renderer\.domElement\.toDataURL/);
-  assert.match(fn(main, 'boot'), /^function boot\(\) \{\n  initScene\(\);\n  setAO\(wantAO\(params, \{ webgl2: renderer\.capabilities\.isWebGL2, coarse: matchMedia\('\(pointer: coarse\)'\)\.matches \}\)\);\n/);
+  assert.match(fn(main, 'boot'), /^function boot\(\) \{\n  initScene\(\);\n  const coarse = matchMedia\('\(pointer: coarse\)'\)\.matches, low = lowDetail\(params, \{ coarse \}\);[^\n]*\n  setAO\(wantAO\(params, \{ webgl2: renderer\.capabilities\.isWebGL2, coarse, low \}\)\);\n  buildEngine\(low\);\n/);
   const dispose = fn(main, 'dispose');
   assert.ok(dispose.indexOf('disposePost();') > 0 && dispose.indexOf('disposePost();') < dispose.indexOf('renderer.dispose();'), 'disposePost() до renderer.dispose()');
   const post = read('../src/render/post.js');
-  assert.match(fn(post, 'renderFrame'), /^function renderFrame\(\) \{\n  if \(!rt\) \{ renderer\.render\(scene, camera\); return; \}/, 'без AO — прежний renderer.render()');
+  assert.match(fn(post, 'renderFrame'), /^function renderFrame\(\) \{\n  updateShadows\(renderer, scene\);[^\n]*\n  if \(!rt\) \{ renderer\.render\(scene, camera\); return; \}/, 'без AO — прежний renderer.render()');
   assert.match(fn(post, 'renderFrame'), /try \{ gtao\.render\(renderer, null, rt\); \} catch \(err\) \{ failed = err; \}[^\n]*\n  if \(failed\) \{[^\n]*\n[^\n]*\n    disposePost\(\);\n    renderer\.render\(scene, camera\);\n  \}\n?$/,
     'ошибка в проходах GTAO выключает AO, кадр дорисовывается без него');
 });

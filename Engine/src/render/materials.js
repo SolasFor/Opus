@@ -5,6 +5,11 @@
  * Палитра под студийный свет: металлы — metalness до 1, шероховатость по виду обработки; userData.surf — вид
  * процедурной фактуры (render/surface.js, подключает nodeMat()); керамика и краска — MeshPhysicalMaterial с лаком.
  * Цвет побежалости выпуска (heatTint) спокойнее; свечение (heatGlow) и штриховка сечения прежние.
+ * M-07b: обработанный алюминий (aluMach), чёрная краска (paintBlack), теплоэкран (shield). Крепёж и мелочь рисуются
+ * одним мешем на узел: ключи tint() задают только цвет, Parts.add() пишет его в цвет вершин общего материала
+ * hw (металл) или paintHw (краска), поэтому эти ключи сами в сцену не попадают.
+ * M-07c: поковки (forged: щёки коленвала, маховик, шатуны), точёный поршень (piston); ключи-цвета hole (тёмные
+ * заглушки — вид сверлений и облегчающих отверстий) и carbon (нагар на тарелках клапанов).
  */
 import * as THREE from 'three';
 import { cutPlane, CAP } from './scene.js';
@@ -22,6 +27,7 @@ function createMaterials() {
   const std = o => new THREE.MeshStandardMaterial(o);
   const phys = o => new THREE.MeshPhysicalMaterial(o);
   const S = (m, surf) => { m.userData.surf = surf; return m; };   // M-07a: вид фактуры для render/surface.js
+  const tint = (color, into = 'hw') => { const m = std({ color }); m.userData.into = into; return m; };   // M-07b
   // exhaust heat tint along the runner (u = 0 at the port): straw → bronze → blue → steel
   const heatTint = stripeTexture((g, w, h) => {
     const gr = g.createLinearGradient(0, 0, w, 0);
@@ -49,9 +55,12 @@ function createMaterials() {
     aluCast:  S(std({ color: 0x9a9ea2, metalness: 0.85, roughness: 0.60 }), 'cast'),
     aluLight: S(std({ color: 0xb9bdc1, metalness: 0.92, roughness: 0.34 }), 'castFine'),
     aluDark:  S(std({ color: 0x777c82, metalness: 0.85, roughness: 0.55 }), 'cast'),
+    aluMach:  S(std({ color: 0xc4c8cc, metalness: 1.00, roughness: 0.26 }), 'machined'),   // M-07b: обработанные плоскости
     // сталь: шлифованные шейки и стержни, поковки
     steel:    S(std({ color: 0xb4b8bc, metalness: 1.00, roughness: 0.30 }), 'machined'),
     steelDark:S(std({ color: 0x6a6e72, metalness: 1.00, roughness: 0.46 }), 'forged'),
+    forged:   S(std({ color: 0x7b7f83, metalness: 1.00, roughness: 0.50 }), 'forged'),     // M-07c: поковки
+    piston:   S(std({ color: 0xc0c3c6, metalness: 0.92, roughness: 0.36 }), 'machined'),   // M-07c: точёный поршень
     chrome:   S(std({ color: 0xd2d6da, metalness: 1.00, roughness: 0.16 }), 'machined'),
     brass:    S(std({ color: 0xb98652, metalness: 1.00, roughness: 0.34 }), 'machined'),   // вкладыши
     rings:    S(std({ color: 0x2a2d31, metalness: 1.00, roughness: 0.36 }), 'machined'),
@@ -63,12 +72,26 @@ function createMaterials() {
     soot:     S(std({ color: 0x2b2826, metalness: 0.30, roughness: 0.88 }), 'iron'),
     plastic:  S(std({ color: 0x232528, metalness: 0.00, roughness: 0.58 }), 'plastic'),
     // краска с лаком (clearcoat): «апельсиновая корка» — в фактуре paint
-    paintBlue:S(phys({ color: 0x174f97, metalness: 0.25, roughness: 0.40, clearcoat: 0.8, clearcoatRoughness: 0.25 }), 'paint'),
-    paintRed: S(phys({ color: 0xc8361f, metalness: 0.10, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.3 }), 'paint'),
+    paintBlack:S(phys({ color: 0x18191b, metalness: 0.30, roughness: 0.50, clearcoat: 0.15, clearcoatRoughness: 0.45 }), 'paint'),   // M-07b: поддон, датчики
+    paintHw:  S(phys({ color: 0xffffff, vertexColors: true, metalness: 0.20, roughness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.25 }), 'paint'),   // M-07b
+    paintBlue:tint(0x174f97, 'paintHw'),   // M-07b: фильтр
+    paintRed: tint(0xc8361f, 'paintHw'),   // M-07b: ручка щупа
     pipe:     S(std({ color: 0xffffff, map: heatTint, emissive: 0x000000, emissiveMap: heatGlow, metalness: 1.00, roughness: 0.36 }), 'castFine'),
     pipe2:    S(std({ color: 0x8e9196, metalness: 1.00, roughness: 0.42 }), 'castFine'),
+    shield:   S(std({ color: 0xaeb2b6, metalness: 1.00, roughness: 0.40 }), 'shield'),   // M-07b: штампованный теплоэкран
     belt:     S(std({ color: 0xffffff, map: beltTex, metalness: 0.0, roughness: 0.78 }), 'rubber'),
-    rubber:   S(std({ color: 0x151618, metalness: 0.0, roughness: 0.82 }), 'rubber')
+    rubber:   S(std({ color: 0x151618, metalness: 0.0, roughness: 0.82 }), 'rubber'),
+    // M-07b: крепёж и мелочь узла — общий материал с цветом вершин и ключи-цвета для него
+    hw:       S(std({ color: 0xffffff, vertexColors: true, metalness: 1.00, roughness: 0.40 }), 'forged'),
+    bolt:     tint(0x8a8d90),   // болты, гайки (оцинковка)
+    boltDark: tint(0x2c2e31),   // оксидированные болты
+    copper:   tint(0xb06a3e),   // медные гайки выпуска
+    fitting:  tint(0xb4b8bc),   // мелкие стальные детали (цвет steel)
+    fittingDark: tint(0x6a6e72),   // шайбы, пробки (цвет steelDark)
+    shell:    tint(0xb98652),   // вкладыши коренных подшипников (цвет brass)
+    wire:     tint(0x151618),   // провод датчика, резина демпфера (цвет rubber)
+    hole:     tint(0x111214),   // M-07c: сверления и облегчающие отверстия — тёмные заглушки
+    carbon:   tint(0x2b2826)    // M-07c: нагар на тарелках клапанов (цвет soot)
   };
   M.belt.userData.isBelt = true;
   M.pipe.userData.isPipe = true;

@@ -3,6 +3,7 @@
  * проверяет tests/split-sync.test.js.
  * Здесь блок «nodes» без nodeMat и registerLocalPart и подраздел 6.11: buildEngine() присваивает
  * nodesList, поэтому они в одном модуле.
+ * M-07c: buildEngine(low) — уровень детализации задаётся до сборки деталей (setDetail, render/parts/geometry.js).
  */
 import * as THREE from 'three';
 import { NODE_INFO } from '../../config/parts.js';
@@ -10,6 +11,7 @@ import { STEPS } from '../../config/steps.js';
 import { V3 } from '../world.js';
 import { engineRoot } from '../scene.js';
 import { createMaterials } from '../materials.js';
+import { setDetail } from './geometry.js';
 import { buildBlock } from './block.js';
 import { buildCrankshaft } from './crankshaft.js';
 import { buildRods } from './rods.js';
@@ -37,7 +39,8 @@ function createNode(key, offset, housing = false) {
 }
 
 /* ---------- 6.11 BUILD ALL ---------- */
-function buildEngine() {
+function buildEngine(low = false) {
+  setDetail(low);
   createMaterials();
   buildBlock(createNode('block', [0, 1.55, 0], true));
   buildCrankshaft(createNode('crankshaft', [0, -1.95, 0]));
