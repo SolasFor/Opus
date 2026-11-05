@@ -94,7 +94,7 @@ const WIRING_C = {
 const MOVES = [['ac34ff3', RENDER, WIRING_B], ['a463fb8', UI, WIRING_C]];
 // M-07a и дальше: модуль → этап, на котором его тело намеренно изменено после переноса
 const CHANGED = {
-  'render/parts/block.js': 'M-07b',
+  'render/parts/block.js': 'M-07b, M-07d',
   'render/parts/head.js': 'M-07b',
   'render/parts/intake.js': 'M-07b, M-07c',
   'render/parts/exhaust.js': 'M-07b, M-07c',
