@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Аквариум</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='7' fill='%23071a26' stroke='%235fd3ff' stroke-width='2'/%3E%3Cpath d='M6 16c4-6 12-7 17 0-5 7-13 6-17 0z' fill='%23ffb347'/%3E%3Cpath d='M22.5 16l5-4v8z' fill='%23ffb347'/%3E%3Ccircle cx='10.5' cy='14.6' r='1.3' fill='%23071a26'/%3E%3C/svg%3E">
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#03070b;}
   body{background:radial-gradient(ellipse at 50% 42%, #10283a 0%, #071420 38%, #02060a 75%, #010203 100%);
@@ -65,18 +66,71 @@
   #boot .b:nth-child(2){animation-delay:.3s;width:7px;height:7px}#boot .b:nth-child(3){animation-delay:.6s;width:12px;height:12px}
   @keyframes bub{0%{transform:translateY(14px);opacity:0}30%{opacity:1}100%{transform:translateY(-26px);opacity:0}}
   #boot.err{letter-spacing:.03em;color:#ffd9c9;font-size:15px;line-height:1.6}
+  /* A-01: состояния экрана запуска (data-boot у <html>): booting, slow, lost, failed, ready */
+  #boot[hidden],#boot [hidden]{display:none}
+  #bootmsg{max-width:34em;line-height:1.6}
+  html[data-boot=slow] #boot,html[data-boot=lost] #boot{letter-spacing:.03em;font-size:15px}
+  #bootmsg b{font-weight:600}
+  #bootmsg .why{opacity:.75;font-size:13px}
+  #bootmsg code{font:12px ui-monospace,Menlo,Consolas,monospace}
+  #bootact{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  #bootact button{font:inherit;font-size:14px;letter-spacing:.04em;padding:9px 20px;border-radius:10px;cursor:pointer;color:#e2f6ff;
+    background:rgba(95,211,255,.16);border:1px solid rgba(150,225,255,.4);transition:background .2s}
+  #bootact button:hover{background:rgba(95,211,255,.3)}
+  #bootact button:focus-visible{outline:2px solid #9fe6ff;outline-offset:3px}
 </style>
 </head>
 <body>
-<div id="boot"><div><span class="b"></span><span class="b"></span><span class="b"></span></div><div id="bootmsg">Наполняем аквариум…</div></div>
+<div id="boot"><div class="bubs" aria-hidden="true"><span class="b"></span><span class="b"></span><span class="b"></span></div><div id="bootmsg" aria-live="polite">Наполняем аквариум…</div><div id="bootact" hidden></div></div>
 <script>
-  // shown if the three.js CDN is unreachable or WebGL fails
-  window.__aqFail = function (why) {
-    var b = document.getElementById('boot'); if (!b || window.__ok) return;
-    b.className = 'err';
-    b.innerHTML = '<div>Не удалось запустить аквариум.</div><div style="opacity:.75;font-size:13px">' + (why || 'Библиотека Three.js не загрузилась с CDN — проверьте подключение к интернету и обновите страницу.') + '</div>';
-  };
-  setTimeout(function () { if (!window.__ok) window.__aqFail(); }, 15000);
+  /* A-01: экран запуска. Состояние — атрибут data-boot у <html>: booting → ready | failed; slow — мягкое уведомление
+     через 15 с (не ошибка); после запуска lost — потерян WebGL-контекст. Классический скрипт: работает, даже когда
+     модуль с three.js не загрузился. Побеждает первая причина сбоя; после ready сбой запуска не объявляется.
+     Если первый кадр всё же отрисован (ошибка была не в аквариуме, а, например, в расширении браузера), ready скрывает экран.
+     Устроен как экран запуска Engine/index.html (M-03); проверки — Akvarium/tests/boot.test.js. */
+  (function () {
+    var LABEL = { retry: 'Повторить', refresh: 'Обновить', reload: 'Перезагрузить' };
+    var BOOT = 'Наполняем аквариум…';
+    var CDN = 'Библиотека Three.js не загрузилась с CDN (unpkg.com). Проверьте подключение к интернету и нажмите «Повторить».';
+    var root = document.documentElement, timer = 0;
+    var esc = window.__aqEsc = function (s) {
+      return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+    };
+    var screen = window.__aqScreen = function (state, html, acts) {
+      var box = document.getElementById('boot'), msg = document.getElementById('bootmsg'), act = document.getElementById('bootact');
+      root.setAttribute('data-boot', state);
+      clearTimeout(timer);
+      if (state === 'ready') {   // плавно скрыть; элемент остаётся для сообщений после запуска
+        box.classList.add('gone');
+        timer = setTimeout(function () { box.hidden = true; }, 1500);
+        return;
+      }
+      box.hidden = false; box.classList.remove('gone');
+      if (state === 'failed') box.classList.add('err'); else box.classList.remove('err');
+      box.querySelector('.bubs').hidden = state === 'failed';
+      msg.innerHTML = html || BOOT;
+      act.innerHTML = (acts || []).map(function (a) {
+        return '<button type="button" onclick="location.reload()">' + LABEL[a] + '</button>';
+      }).join('');
+      act.hidden = !act.innerHTML;
+    };
+    /* why — HTML-текст причины (по умолчанию — CDN), acts — кнопки: retry | refresh | reload */
+    var fail = window.__aqFail = function (why, acts) {
+      if (window.__ok || window.__aqFailed) return;
+      window.__aqFailed = true;
+      screen('failed', '<b>Не удалось запустить аквариум.</b><br><span class="why">' + (why || CDN) + '</span>', acts || ['retry']);
+    };
+    /* модуль не загрузился (onerror у <script type="module">): внешние у него только three.js и аддоны с unpkg */
+    window.__aqModuleError = function () { fail(CDN, ['retry']); };
+    window.addEventListener('error', function (e) {
+      if (e && e.message) fail('Ошибка при запуске: ' + esc(e.message), ['reload']);
+    });
+    setTimeout(function () {
+      if (!window.__ok && !window.__aqFailed && root.getAttribute('data-boot') === 'booting') screen('slow', 'Загрузка идёт дольше обычного… Возможно, соединение медленное или CDN (unpkg.com) ' +
+        'отвечает с задержкой. Можно подождать или обновить страницу.', ['refresh']);
+    }, 15000);
+    root.setAttribute('data-boot', 'booting');
+  })();
 </script>
 <div id="vignette"></div>
 <canvas id="grainSrc" width="1" height="1" style="display:none"></canvas>
@@ -94,7 +148,7 @@
   "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
 } }
 </script>
-<script type="module" onerror="window.__aqFail()">
+<script type="module" onerror="window.__aqModuleError()">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -107,7 +161,11 @@ const SUN = new THREE.Vector3(0.28, 1, 0.18).normalize();
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-} catch (e) { window.__aqFail('Браузер не поддерживает WebGL (или он отключён).'); throw e; }
+} catch (e) {
+  window.__aqFail('Браузер не смог включить 3D-графику (WebGL): она не поддерживается или отключена. ' +
+    'Включите аппаратное ускорение в настройках браузера или откройте страницу в другом браузере.', ['reload']);
+  throw e;
+}
 const MAXPR = Math.min(window.devicePixelRatio || 1, 1.75);
 let pixelRatio = MAXPR;
 renderer.setPixelRatio(pixelRatio);
@@ -925,8 +983,9 @@ const EYE = `
     if (vFin < 0.5) { col = mix(col, vec3(0.85, 0.75, 0.4), smoothstep(er * 1.25, er * 1.1, d)); col = mix(col, vec3(0.01), smoothstep(er, er * 0.85, d));
       col = mix(col, vec3(1.0), smoothstep(er * 0.32, er * 0.2, length(vec2(vLp.z, vLp.y) - ec - vec2(er * 0.3, er * 0.35)))); irid *= step(er * 1.3, d); }
   }`;
-// tiny procedural environment map for glossy fish (gradient sky + sun blob), prefiltered with PMREM
-const ENV = (() => {
+// tiny procedural environment map for glossy fish (gradient sky + sun blob), prefiltered with PMREM.
+// A-01: результат PMREM — рендер в текстуру, после восстановления WebGL-контекста его строим заново (makeEnv)
+function makeEnv() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
   const gr = g.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#d8f6ff'); gr.addColorStop(0.42, '#2f8fa8'); gr.addColorStop(1, '#03121a');
   g.fillStyle = gr; g.fillRect(0, 0, 256, 128);
@@ -934,7 +993,8 @@ const ENV = (() => {
   g.fillStyle = rg; g.fillRect(0, 0, 256, 128);
   const t = new THREE.CanvasTexture(c); t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.SRGBColorSpace;
   const pm = new THREE.PMREMGenerator(renderer), e = pm.fromEquirectangular(t).texture; pm.dispose(); t.dispose(); return e;
-})();
+}
+let ENV = makeEnv();
 const FISH_MATS = [];
 function fishMaterial(key, pattern, dims, eyes = 1.0) {
   const uniforms = { uHalfL: { value: dims.L / 2 }, uLen: { value: dims.L }, uAmp: { value: dims.amp }, uH: { value: dims.H } };
@@ -1641,7 +1701,7 @@ function setToggle(k, v) {
   syncUI();
 }
 function syncUI() { for (const k in TG) TG[k].checked = !!K[k]; }
-function syncSliders() { for (const k in SL) { if (k === 'pop') continue; SL[k].inp.value = K[k]; SL[k].out.textContent = fmt[k](K[k]); } }
+function syncSliders() { for (const k in SL) { SL[k].inp.value = K[k]; SL[k].out.textContent = fmt[k](K[k]); } }
 function markPreset() { for (const p in PB) PB[p].classList.toggle('act', p === preset); }
 function setPreset(p) { preset = p; tween = PRESETS[p]; markPreset(); }
 markPreset();
@@ -1752,7 +1812,52 @@ if (innerWidth < 900) togglePanel();
 function applyViewOffset() { camera.setViewOffset(innerWidth, innerHeight, viewOff, 0, innerWidth, innerHeight); camera.updateProjectionMatrix(); }
 const clock = new THREE.Clock();
 const fpsEl = document.getElementById('fps');
-let frames = 0, acc = 0, slowCount = 0, fpsFrames = 0, fpsAcc = 0, booted = false;
+let fpsFrames = 0, fpsAcc = 0, booted = false;
+
+// A-01: адаптивное разрешение в обе стороны, с гистерезисом. Решение — чистая функция adaptStep (без DOM и three.js);
+// tests/adaptive.test.js вырезает блок между метками @pure и проверяет его в node:vm.
+// @pure adaptStep begin
+/* Одно измерение — окно ≥ WIN с (в среднем fps за окно). Как и раньше: fps < LOW два окна подряд — pixelRatio ниже на STEP
+ * (не ниже MIN). Новое: fps > HIGH hold окон подряд — выше на STEP (не выше maxPR); если в первые TRIAL окон после повышения
+ * разрешение снова пришлось снизить, повышение не удалось, и следующего ждём вдвое дольше (3 → 6 → 12 → 24 окна, то есть 6 → 48 с).
+ * Повышение, продержавшееся TRIAL окон, возвращает ожидание к HOLD. Измерения начинаются через WARM с после первого кадра.
+ * s — состояние прошлого шага (в начале — ADAPT0 с pr), возвращается новое; s не меняется. */
+const ADAPT = { WIN: 2, WARM: 5, LOW: 45, HIGH: 58, STEP: 0.25, MIN: 0.75, SLOW: 2, HOLD: 3, HOLD_MAX: 24, TRIAL: 5 };
+const ADAPT0 = { pr: 1, slow: 0, good: 0, hold: ADAPT.HOLD, since: Infinity };
+function adaptStep(s, fps, maxPR) {
+  let { pr, slow, good, hold, since } = s;
+  since++;
+  if (fps < ADAPT.LOW) {
+    good = 0;
+    if (pr > ADAPT.MIN && ++slow >= ADAPT.SLOW) {
+      if (since <= ADAPT.TRIAL) hold = Math.min(ADAPT.HOLD_MAX, hold * 2);
+      pr = Math.max(ADAPT.MIN, pr - ADAPT.STEP); slow = 0; since = Infinity;
+    }
+  } else {
+    slow = 0;
+    if (since === ADAPT.TRIAL + 1) hold = ADAPT.HOLD;
+    if (fps > ADAPT.HIGH) { if (++good >= hold && pr < maxPR) { pr = Math.min(maxPR, pr + ADAPT.STEP); good = 0; since = 0; } }
+    else good = 0;
+  }
+  return { pr, slow, good, hold, since };
+}
+// @pure adaptStep end
+const NOADAPT = new URLSearchParams(location.search).has('noadapt');   // ?noadapt — разрешение не меняется (для сравнения кадров)
+const AD = { s: { ...ADAPT0, pr: pixelRatio }, frames: 0, acc: 0, t0: 0 };
+function adaptFrame(rawDt) {
+  AD.frames++; AD.acc += rawDt;
+  if (AD.acc <= ADAPT.WIN) return;
+  const ft = AD.acc / AD.frames;
+  if (!NOADAPT && performance.now() - AD.t0 > ADAPT.WARM * 1000) {
+    AD.s = adaptStep(AD.s, 1 / ft, MAXPR);
+    if (AD.s.pr !== pixelRatio) { pixelRatio = AD.s.pr; renderer.setPixelRatio(pixelRatio); U.uPR.value = pixelRatio; }
+  }
+  window.__aq = { ft, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
+  AD.frames = 0; AD.acc = 0;
+}
+// окно измерения начинается заново после фоновой вкладки и паузы: долгий кадр после возврата — не «медленный»
+function adaptReset() { AD.frames = 0; AD.acc = 0; clock.getDelta(); }
+document.addEventListener('visibilitychange', adaptReset);
 const SHK = new THREE.Vector3();
 function frame() {
   const rawDt = clock.getDelta();
@@ -1801,29 +1906,60 @@ function frame() {
   if (shake > 0.001) { shake *= Math.exp(-rdt * 7); SHK.set(Math.sin(rt * 90) * 0.05, Math.cos(rt * 77) * 0.035, 0).multiplyScalar(shake); camera.position.add(SHK); }
   renderer.render(scene, camera);
   if (shake > 0.001) camera.position.sub(SHK);
-  if (!booted) { booted = true; window.__ok = 1; document.getElementById('boot').classList.add('gone'); }
+  if (!booted) { booted = true; window.__ok = 1; AD.t0 = performance.now(); window.__aqScreen('ready'); }
   // fps counter + adaptive resolution
   fpsFrames++; fpsAcc += rawDt;
   if (fpsAcc > 0.5) { fpsEl.textContent = Math.round(fpsFrames / fpsAcc) + ' fps'; fpsFrames = 0; fpsAcc = 0; }
-  frames++; acc += rawDt;
-  if (acc > 2.0) {
-    const ft = acc / frames;
-    if (rt > 5 && ft > 1 / 45 && pixelRatio > 0.75) { slowCount++; if (slowCount >= 2) { pixelRatio = Math.max(0.75, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio); U.uPR.value = pixelRatio; slowCount = 0; } }
-    else slowCount = 0;
-    window.__aq = { ft, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
-    frames = 0; acc = 0;
+  adaptFrame(rawDt);
+}
+// A-01: цикл кадров. Пока WebGL-контекст потерян — пауза (симуляция стоит); ошибку кадра сообщаем в консоль один раз,
+// если она повторяется 30 кадров подряд — цикл останавливается с сообщением (раньше первая же ошибка молча останавливала цикл)
+const run = { lost: false, stopped: false, errors: 0, timer: 0 };
+function loop() {
+  if (run.stopped) return;
+  if (run.lost) { clock.getDelta(); return; }
+  try {
+    frame();
+    run.errors = 0;
+  } catch (err) {
+    if (++run.errors === 1) console.error(err);
+    if (run.errors >= 30) {
+      run.stopped = true; renderer.setAnimationLoop(null); clearTimeout(run.timer); window.__aqFailed = true;
+      window.__aqScreen('failed', '<b>Аквариум остановлен из-за ошибки.</b><br><span class="why">' +
+        window.__aqEsc(err && err.message ? err.message : err) + '<br>Перезагрузите страницу.</span>', ['reload']);
+    }
   }
 }
+// A-01: потеря и восстановление WebGL-контекста. Обработчики three.js стоят раньше (preventDefault — контекст можно вернуть);
+// после restore three.js сам заново загружает геометрии, материалы и canvas-текстуры, окружение (PMREM) строим заново
+renderer.domElement.addEventListener('webglcontextlost', () => {
+  if (run.stopped) return;                  // после остановки сообщение об ошибке остаётся на экране
+  run.lost = true;
+  window.__aqScreen('lost', 'Графика временно недоступна: браузер сбросил WebGL-контекст. Восстанавливаю…');
+  clearTimeout(run.timer);
+  run.timer = setTimeout(() => window.__aqScreen('failed', '<b>Не удалось восстановить графику.</b><br><span class="why">' +
+    'Браузер не вернул WebGL-контекст. Перезагрузите страницу.</span>', ['reload']), 10000);
+});
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  if (run.stopped) return;
+  clearTimeout(run.timer);
+  ENV = makeEnv();                          // старая текстура осталась в потерянном контексте
+  for (const m of FISH_MATS) m.envMap = ENV;
+  run.lost = false; adaptReset();
+  window.__aqScreen(booted ? 'ready' : 'booting');
+});
 // warm the simulation so fish start in natural formations
 for (let i = 0; i < 90; i++) { t += 1 / 30; U.uTime.value = t; updateSchool(chromis, 0, 1 / 30, t); updateSchool(anthias, 1, 1 / 30, t); updateSolo(clowns, 1 / 30); updateSolo(tangs, 1 / 30); updateSolo(ytang, 1 / 30); updateSolo(idols, 1 / 30); }
-renderer.setAnimationLoop(frame);
+renderer.setAnimationLoop(loop);
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; fitFov(); applyViewOffset();
   renderer.setSize(innerWidth, innerHeight);
 });
-// debug / test hooks
-window.__aqAPI = { skipIntro() { introT = 0.999; }, get introT() { return introT; }, K, setPreset, setToggle, setPopulation, dropFood, feedAt, knockAt, pickAt, startFollow, stopFollow, screenshot, togglePause, togglePanel, SPECIES, camera, controls, get fol() { return fol; }, get foodAlive() { return foodAlive; } };
+// debug / test hooks. A-01 (T-11): setPopulation из API двигает и слайдер «Рыбы»; доля ограничена диапазоном слайдера
+// (больше 1 — рыб не хватает в массиве стаи)
+function apiSetPopulation(p) { setPopulation(clamp(+p || 0, 0.05, 1)); syncSliders(); }
+window.__aqAPI = { skipIntro() { introT = 0.999; }, get introT() { return introT; }, K, setPreset, setToggle, setPopulation: apiSetPopulation, dropFood, feedAt, knockAt, pickAt, startFollow, stopFollow, screenshot, togglePause, togglePanel, SPECIES, camera, controls, get fol() { return fol; }, get foodAlive() { return foodAlive; } };
 </script>
 </body>
 </html>
