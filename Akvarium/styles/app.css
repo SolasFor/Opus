@@ -1,0 +1,72 @@
+  html,body{margin:0;height:100%;overflow:hidden;background:#03070b;}
+  body{background:radial-gradient(ellipse at 50% 42%, #10283a 0%, #071420 38%, #02060a 75%, #010203 100%);
+    font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-user-select:none;user-select:none;}
+  canvas{display:block;outline:none;cursor:grab;touch-action:none;}
+  canvas:active{cursor:grabbing;}
+  canvas.fishy{cursor:pointer;}
+  #vignette{position:fixed;inset:0;pointer-events:none;z-index:1;
+    background:radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 52%, rgba(0,3,6,.62) 100%);}
+  #grain{position:fixed;inset:-60px;pointer-events:none;z-index:1;opacity:.07;animation:grain 1s steps(6) infinite;}
+  @keyframes grain{0%{transform:translate(0,0)}17%{transform:translate(-23px,11px)}33%{transform:translate(17px,-29px)}50%{transform:translate(-9px,31px)}67%{transform:translate(29px,7px)}83%{transform:translate(-31px,-17px)}100%{transform:translate(0,0)}}
+  #hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2;font-size:12.5px;line-height:1.5;letter-spacing:.03em;
+    color:rgba(205,238,255,.62);text-shadow:0 1px 6px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;transition:opacity 2s ease;opacity:0;}
+  #hint.on{opacity:1}
+  #fps{position:fixed;left:12px;bottom:10px;z-index:2;font:11px/1 ui-monospace,Menlo,Consolas,monospace;color:rgba(190,235,255,.4);pointer-events:none;}
+  #tip{position:fixed;z-index:4;pointer-events:none;padding:5px 9px 6px;border-radius:8px;background:rgba(4,20,30,.62);
+    border:1px solid rgba(140,220,255,.22);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:#e2f6ff;font-size:12.5px;
+    white-space:nowrap;opacity:0;transition:opacity .25s;transform:translate(14px,-50%);}
+  #tip i{display:block;font-size:10.5px;color:rgba(170,220,240,.7);margin-top:1px}
+  #tip.on{opacity:1}
+  #follow{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:3;padding:6px 14px;border-radius:20px;background:rgba(4,20,30,.55);
+    border:1px solid rgba(140,220,255,.2);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#dff5ff;font-size:12.5px;
+    opacity:0;transition:opacity .5s;pointer-events:none;white-space:nowrap;}
+  #follow.on{opacity:1}
+  #panel{position:fixed;top:14px;right:14px;width:236px;z-index:3;padding:12px 14px 12px;color:#d6f3ff;font-size:12.5px;line-height:1.3;
+    background:linear-gradient(160deg,rgba(18,52,70,.55),rgba(4,18,28,.62));backdrop-filter:blur(12px) saturate(1.3);-webkit-backdrop-filter:blur(12px) saturate(1.3);
+    border:1px solid rgba(150,225,255,.2);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);
+    transition:opacity .4s, transform .4s;max-height:calc(100vh - 28px);overflow:auto;scrollbar-width:thin;}
+  #panel.hid{opacity:0;transform:translateX(30px);pointer-events:none;}
+  #panel h3{margin:0 0 9px;font:600 13px/1 inherit;letter-spacing:.12em;text-transform:uppercase;color:#bfeaff;display:flex;justify-content:space-between;align-items:center}
+  #panel h3 span{font:400 10.5px/1 inherit;letter-spacing:.02em;text-transform:none;color:rgba(190,230,250,.55)}
+  #panel .sec{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(170,220,240,.5);margin:11px 0 5px}
+  .seg{display:flex;gap:5px}
+  .seg button,.btns button{flex:1;padding:6px 0;background:rgba(95,211,255,.1);color:inherit;border:1px solid rgba(140,220,255,.25);border-radius:8px;
+    cursor:pointer;font:inherit;transition:background .2s,border-color .2s}
+  .seg button:hover,.btns button:hover{background:rgba(95,211,255,.25)}
+  .seg button.act{background:rgba(95,211,255,.34);border-color:rgba(170,235,255,.6);box-shadow:0 0 12px rgba(95,211,255,.25)}
+  .seg button b{font-weight:400;opacity:.45;font-size:10px;margin-left:3px}
+  .row{display:grid;grid-template-columns:78px 1fr 30px;align-items:center;gap:6px;margin:5px 0}
+  .row output{text-align:right;font-variant-numeric:tabular-nums;color:rgba(200,235,250,.6);font-size:11px}
+  input[type=range]{width:100%;margin:0;accent-color:#5fd3ff;height:16px}
+  .tog{display:flex;justify-content:space-between;align-items:center;margin:4px 0;cursor:pointer}
+  .tog input{appearance:none;-webkit-appearance:none;width:30px;height:16px;border-radius:9px;background:rgba(255,255,255,.14);position:relative;cursor:pointer;margin:0;transition:background .2s;flex:none}
+  .tog input::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#cfefff;transition:transform .2s}
+  .tog input:checked{background:#2fa8d8}
+  .tog input:checked::after{transform:translateX(14px)}
+  .tog small{opacity:.45;font-size:10px;margin-left:4px}
+  .btns{display:flex;gap:5px;margin-top:6px}
+  #keys{margin-top:9px;font-size:10.5px;line-height:1.55;color:rgba(180,225,245,.5)}
+  #keys kbd{font:10px ui-monospace,monospace;padding:0 4px;border:1px solid rgba(160,220,255,.25);border-radius:3px;color:rgba(210,240,255,.75)}
+  #open{position:fixed;top:14px;right:14px;z-index:3;width:34px;height:34px;border-radius:10px;border:1px solid rgba(150,225,255,.22);
+    background:rgba(4,20,30,.5);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#cfefff;font-size:16px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .4s}
+  #open.on{opacity:.75;pointer-events:auto}
+  #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:5;transition:opacity .5s}
+  #boot{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;background:#02080c;color:#9fe6ff;
+    font-size:16px;letter-spacing:.14em;text-align:center;padding:20px;transition:opacity 1.4s ease}
+  #boot.gone{opacity:0;pointer-events:none}
+  #boot .b{width:10px;height:10px;border:1.5px solid rgba(160,230,255,.7);border-radius:50%;display:inline-block;margin:0 5px;animation:bub 1.6s ease-in infinite}
+  #boot .b:nth-child(2){animation-delay:.3s;width:7px;height:7px}#boot .b:nth-child(3){animation-delay:.6s;width:12px;height:12px}
+  @keyframes bub{0%{transform:translateY(14px);opacity:0}30%{opacity:1}100%{transform:translateY(-26px);opacity:0}}
+  #boot.err{letter-spacing:.03em;color:#ffd9c9;font-size:15px;line-height:1.6}
+  /* A-01: состояния экрана запуска (data-boot у <html>): booting, slow, lost, failed, ready */
+  #boot[hidden],#boot [hidden]{display:none}
+  #bootmsg{max-width:34em;line-height:1.6}
+  html[data-boot=slow] #boot,html[data-boot=lost] #boot{letter-spacing:.03em;font-size:15px}
+  #bootmsg b{font-weight:600}
+  #bootmsg .why{opacity:.75;font-size:13px}
+  #bootmsg code{font:12px ui-monospace,Menlo,Consolas,monospace}
+  #bootact{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  #bootact button{font:inherit;font-size:14px;letter-spacing:.04em;padding:9px 20px;border-radius:10px;cursor:pointer;color:#e2f6ff;
+    background:rgba(95,211,255,.16);border:1px solid rgba(150,225,255,.4);transition:background .2s}
+  #bootact button:hover{background:rgba(95,211,255,.3)}
+  #bootact button:focus-visible{outline:2px solid #9fe6ff;outline-offset:3px}
