@@ -6,6 +6,8 @@
  * blurAfterPointer(node) снимает фокус с элемента после мыши или касания. moveFocusOut(box, to) переносит фокус
  * с элемента внутри box, который сейчас скроется (панель, карточка, меню), на элемент to — если фокус пришёл
  * с клавиатуры: иначе он пропал бы со страницы.
+ * M-05c: refocus(a) возвращает фокус элементу a после переноса узлов (шторка телефона, ui/sheet.js): элемент, вынутый
+ * из документа или попавший в скрытый и inert контейнер, фокус теряет.
  */
 const input = { last: 'pointer' };
 // life — AbortController из main.js (снимает слушатели в dispose()). Вызывать до других слушателей document: тогда
@@ -21,4 +23,8 @@ function moveFocusOut(box, to) {
   if (a && a !== to && box.contains(a) && viaKeyboard() && to) to.focus({ preventScroll: true });
 }
 
-export { trackInput, viaKeyboard, blurAfterPointer, moveFocusOut };
+function refocus(a) {
+  if (a && a !== document.body && a !== document.activeElement && a.isConnected) a.focus({ preventScroll: true });
+}
+
+export { trackInput, viaKeyboard, blurAfterPointer, moveFocusOut, refocus };

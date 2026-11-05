@@ -15,6 +15,8 @@
  * области), стрелки вращают камеру, Shift+стрелки сдвигают, PgUp и PgDn приближают и отдаляют (ui/camera.js); без
  * такого фокуса ← и → переключают шаги, как раньше. Сегмент «Вид» — радиогруппа: стрелки выбирают соседний вид.
  * Закрытая с клавиатуры карточка возвращает фокус на фишку детали (или на сцену), снятая изоляция — на сцену.
+ * M-05c: шторка телефона — ui/sheet.js; во вкладке «Вид» — кнопки камеры #camSeg и «Сбросить вид». На телефоне после
+ * ползунка разборки двигатель вписывается в свободную область над шторкой, если вышел за неё.
  */
 import { DEG } from '../config/engine-spec.js';
 import { audio } from '../audio/engine-audio.js';
@@ -26,7 +28,7 @@ import { inPts, exPts } from '../render/effects/strokes.js';
 import { ui, el } from './state.js';
 import { meanProgress, boundsWith } from './explode.js';
 import { exitStepMode, animateExplode, nextStep, prevStep, updateStepUI } from './steps.js';
-import { frameBox, cameraPreset, resetView, applyViewShift, focusOn, orbitBy, panBy, zoomBy } from './camera.js';
+import { frameBox, fitIfNeeded, cameraPreset, resetView, applyViewShift, focusOn, orbitBy, panBy, zoomBy } from './camera.js';
 import { setView, cycleView, setCut } from './view.js';
 import { pick, select, isolate, setHover } from './selection.js';
 import { updateLive } from './info.js';
@@ -34,7 +36,8 @@ import { setupCharts } from './charts/canvas.js';
 import { initPhases } from './phases.js';
 import { buildLabels } from './labels.js';
 import { touch, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot } from './controls.js';
-import { fitLayout, onFreeArea, togglePanels, toggleDrawer, initSections, panelShown } from './layout.js';
+import { fitLayout, onFreeArea, togglePanels, toggleDrawer, initSections, panelShown, sheetMode } from './layout.js';
+import { initSheet } from './sheet.js';
 import { menuOpen, setMenu, toggleMenu, initMenu, openHelp, closeHelp, toggleHelp, onHelpClosed } from './menus.js';
 import { trackInput, viaKeyboard, blurAfterPointer, moveFocusOut } from './focus.js';
 import { S, toastText } from './strings.ru.js';
@@ -48,9 +51,10 @@ function initUI() {
    'drawerLeft', 'drawerRight', 'partChips', 'partCount', 'hud', 'cycle', 'timeline', 'fps', 'btnRun', 'btnSlow', 'speedSlider', 'speedVal',
    'angleSlider', 'angleVal', 'angleSub', 'angleStroke', 'btnDegBack', 'btnDegFwd', 'phases', 'tlBands', 'tlTicks', 'pv', 'pvTitle', 'pvVal',
    'infocard', 'infoClose', 'infoTag', 'infoTitle', 'infoDesc', 'infoSpecs', 'infoLive', 'btnFocus', 'btnIsolate',
-   'isoBar', 'isoName', 'btnUnIso', 'toast', 'flash', 'help', 'helpClose', 'helpLink', 'helpLink2', 'labels', 'tooltip'].forEach(id => { el[id] = $(id); });
+   'isoBar', 'isoName', 'btnUnIso', 'btnCamReset', 'toast', 'flash', 'help', 'helpClose', 'helpLink', 'helpLink2', 'labels', 'tooltip'].forEach(id => { el[id] = $(id); });
   el.canvas = renderer.domElement;
   el.fireChips = Array.from(document.querySelectorAll('.fire .c'));
+  el.fireHot = el.fireChips.concat(Array.from(document.querySelectorAll('#fireMini [data-c]')));   // M-05c: и мини-фишки шторки
 
   // M-05d: после мыши и касания кнопки не держат фокус (Space не нажимает их повторно); фокус с клавиатуры остаётся
   trackInput(life);
@@ -61,7 +65,10 @@ function initUI() {
     if (ui.explodeTw) { ui.explodeTw.kill(); ui.explodeTw = null; }
     ui.explode = el.explodeSlider.value / 100;
   });
-  el.explodeSlider.addEventListener('change', () => blurAfterPointer(el.explodeSlider));
+  el.explodeSlider.addEventListener('change', () => {
+    blurAfterPointer(el.explodeSlider);
+    if (sheetMode()) fitIfNeeded(boundsWith(ui.explode));   // M-05c: на телефоне разобранный двигатель не уходит за край
+  });
   el.btnAssemble.addEventListener('click', () => { animateExplode(0); frameBox(boundsWith(0), 1.2, 0.15); });
   el.btnExplode.addEventListener('click', () => { animateExplode(1); frameBox(boundsWith(1), 1.35, 0.25); });
   el.btnPrev.addEventListener('click', prevStep);
@@ -76,6 +83,8 @@ function initUI() {
   initMenu(life.signal);
   el.camMenu.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', () => { setMenu(false); cameraPreset(b.dataset.cam); }));
   el.btnReset.addEventListener('click', () => { setMenu(false); resetView(); });
+  document.querySelectorAll('#camSeg [data-preset]').forEach(b => b.addEventListener('click', () => cameraPreset(b.dataset.preset)));
+  el.btnCamReset.addEventListener('click', resetView);
   document.addEventListener('pointerdown', e => { if (menuOpen() && !e.target.closest('.menu-wrap')) setMenu(false); }, { signal: life.signal });
   el.btnLabels.addEventListener('click', () => { ui.labels = !ui.labels; setToggle(el.btnLabels, ui.labels); });
   el.btnRotate.addEventListener('click', () => { ui.autoRotate = !ui.autoRotate; setToggle(el.btnRotate, ui.autoRotate); ui.lastInteract = 0; });
@@ -102,6 +111,7 @@ function initUI() {
   el.drawerRight.addEventListener('click', () => toggleDrawer('cycle'));
   el.btnPanels.addEventListener('click', () => togglePanels());
   initSections();
+  initSheet(life);
   onFreeArea(applyViewShift);               // П-4: центр кадра — в свободной области между панелями
   fitLayout();
   el.helpLink.addEventListener('click', openHelp);

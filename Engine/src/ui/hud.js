@@ -7,6 +7,8 @@
  * «цикл N°», «Ц1 — такт» — ui/phases.js.
  * M-05d: числа и строки — из ui/strings.ru.js («35 %», «52°»); у ползунка разборки aria-valuetext — то же, что
  * в заголовке раздела, а пока ползунок в фокусе — его собственное значение.
+ * M-05c: «горячие» фишки порядка работы — и в мини-фишках шторки телефона (el.fireHot); на телефоне фазы и p–V
+ * рисуются, когда открыта вкладка «Работа» (panelShown('cycle')).
  */
 import { DEG, SPARK_ADV } from '../config/engine-spec.js';
 import { mod } from '../sim/math.js';
@@ -39,7 +41,7 @@ function updateHud() {
   // ползунок в фокусе: узлы догоняют его значение плавно, а диктор читает само значение
   const vt = document.activeElement === el.explodeSlider && !ui.stepMode ? explodeState(+el.explodeSlider.value) : st;
   if (el.explodeSlider.getAttribute('aria-valuetext') !== vt) el.explodeSlider.setAttribute('aria-valuetext', vt);
-  for (const c of el.fireChips) { const phi = phaseOf(+c.dataset.c); c.classList.toggle('hot', phi < 90 || phi > 720 - SPARK_ADV); }
+  for (const c of el.fireHot) { const phi = phaseOf(+c.dataset.c); c.classList.toggle('hot', phi < 90 || phi > 720 - SPARK_ADV); }
   const right = panelShown('cycle');
   updatePhases(cd, right && sectionOpen('phases'));
   if (right) { if (sectionOpen('pv')) drawPV(); else setText(el.pvVal, pvValue()); }

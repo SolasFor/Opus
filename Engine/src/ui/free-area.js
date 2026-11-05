@@ -38,4 +38,13 @@ function homeScale(fovDeg, W, H, f) {
   return Math.max(1, Math.tan(fovDeg * Math.PI / 360) / Math.min(v, h));
 }
 
-export { MIN_FREE, freeRect, viewShift, fitDistance, toFreeNdc, homeScale };
+// M-05c: расстояние для «Приблизить» до детали радиуса r (половина диагонали её рамки). На десктопе и планшете —
+// прежнее max(2,3·r, 2,6). На телефоне (sheet — режим шторки) область над шторкой узкая и невысокая: камера
+// отодвигается так же, как стартовый кадр (homeScale), и не ближе, чем сфера детали вписывается в область, —
+// длинная деталь (коленвал) иначе выходит за края по ширине
+function focusDistance(r, fovDeg, W, H, f, sheet) {
+  const d = Math.max(r * 2.3, 2.6);
+  return sheet ? Math.max(d * homeScale(fovDeg, W, H, f), fitDistance(r, fovDeg, W, H, f)) : d;
+}
+
+export { MIN_FREE, freeRect, viewShift, fitDistance, toFreeNdc, homeScale, focusDistance };
