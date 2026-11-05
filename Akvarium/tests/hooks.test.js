@@ -1,13 +1,12 @@
 /**
  * Тестовые хуки и API аквариума (A-01): набор ключей window.__aqAPI и поля window.__aq — как на main@4b8d33a
  * (их используют проверки в браузере); setPopulation из API двигает слайдер «Рыбы» и не выходит за его диапазон (T-11).
- * Статические проверки текста Akvarium/Aquarium.html, без сторонних зависимостей.
+ * Статические проверки текста модульной версии Akvarium (index.html, styles/app.css, src/main.js), без сторонних зависимостей.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { HTML } from './_app.js';   // модульная версия, собранная в один текст (A-01b)
 
-const HTML = readFileSync(new URL('../Aquarium.html', import.meta.url), 'utf8');
 const API = HTML.match(/window\.__aqAPI = \{([^\n]*)\};\n/)[1];
 
 test('ключи window.__aqAPI — прежние, в прежнем порядке', () => {
