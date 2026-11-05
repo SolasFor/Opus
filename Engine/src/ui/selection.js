@@ -2,6 +2,7 @@
  * M-02c: подраздел «selection / hover / isolation» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
  * M-05b: фишки деталей сообщают выбор через aria-pressed; у кнопки «Изолировать» значок и клавиша (isolateLabel).
+ * M-05d: подсказка при наведении — из ui/strings.ru.js.
  */
 import { camera, cutPlane } from '../render/scene.js';
 import { ui, raycaster, pickables, el } from './state.js';
@@ -9,6 +10,7 @@ import { boundsWith } from './explode.js';
 import { fitIfNeeded, focusOn } from './camera.js';
 import { openInfo, closeInfo } from './info.js';
 import { isolateLabel } from './icons.js';
+import { S } from './strings.ru.js';
 
 /* ---------- selection / hover / isolation ---------- */
 function pick() {
@@ -44,7 +46,7 @@ function setHover(n) {
   ui.hover = n;
   el.canvas.classList.toggle('pick', !!n);
   if (n) {
-    el.tooltip.innerHTML = n.userData.info.name + '<i>клик — описание · двойной клик — изолировать</i>';
+    el.tooltip.innerHTML = n.userData.info.name + `<i>${S.hoverHint}</i>`;
     el.tooltip.classList.add('on');
   } else el.tooltip.classList.remove('on');
 }

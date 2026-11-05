@@ -2,6 +2,7 @@
  * M-02c: из подраздела «HUD charts» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
  * M-05b: значение в заголовке раздела p–V считает pvValue(); оно обновляется и в свёрнутом разделе (ui/hud.js).
+ * M-05d: «1,0 бар · впуск» — по нормам ru-RU (ui/strings.ru.js).
  */
 import { VS, VC } from '../../config/engine-spec.js';
 import { strokeOf } from '../../sim/cycle.js';
@@ -10,9 +11,10 @@ import { STROKES } from '../../render/world.js';
 import { phaseOf } from '../../render/kinematics.js';
 import { ui, el } from '../state.js';
 import { charts } from './canvas.js';
+import { S } from '../strings.ru.js';
 
 const PV = { l: 34, r: 10, t: 10, b: 20, pMax: 60 };
-function pvValue() { const phi = phaseOf(ui.pvCyl); return pressureAt(phi).toFixed(1) + ' бар · ' + STROKES[strokeOf(phi)].name.toLowerCase(); }
+function pvValue() { const phi = phaseOf(ui.pvCyl); return S.pvReading(pressureAt(phi), STROKES[strokeOf(phi)].name.toLowerCase()); }
 function pvXY(V, p, w, h) {
   const vMin = VC * 0.9, vMax = (VC + VS) * 1.04;
   return [PV.l + (w - PV.l - PV.r) * (V - vMin) / (vMax - vMin), h - PV.b - (h - PV.t - PV.b) * Math.min(p, PV.pMax) / PV.pMax];

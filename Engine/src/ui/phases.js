@@ -3,12 +3,15 @@
  * с номерами, метки ВМТ и НМТ; рядом с углом — «цикл N°» и «Ц1 — рабочий ход».
  * M-05b: заменяет диаграмму на canvas ui/charts/timing.js. Строки и полосы — DOM, их строит initPhases(); updatePhases()
  * меняет классы и текст только при изменении такта, курсор — одной CSS-переменной --x.
+ * M-05d: строки — из ui/strings.ru.js. Имя строки для экранного диктора — «Цилиндр 1: рабочий ход» (aria-label меняется
+ * вместе с тактом), а не «Ц1 Раб.».
  */
 import { STROKES } from '../render/world.js';
 import { strokeOf } from '../sim/cycle.js';
 import { phaseOf } from '../render/kinematics.js';
 import { ui, el } from './state.js';
 import { STROKE_NUM, STROKE_CLS, pctOf, strokeSpans, deadCentres, sparkAt } from './phase-scale.js';
+import { S } from './strings.ru.js';
 
 const ph = { rows: [], segs: [], now: [], band: [], cyl: -1, s: [], bs: -1 };
 const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
@@ -33,7 +36,7 @@ function initPhases() {
   ph.rows = []; ph.segs = []; ph.now = []; ph.s = []; ph.cyl = -1; ph.bs = -1;
   for (let i = 0; i < 4; i++) {
     const row = node('button', 'ph-row'), bar = node('span', 'ph-bar');
-    row.type = 'button'; row.dataset.c = i; row.title = `Цилиндр ${i + 1} — показать p–V`;
+    row.type = 'button'; row.dataset.c = i; row.title = S.phaseTitle(i + 1);
     row.setAttribute('aria-pressed', String(i === ui.pvCyl));
     bar.setAttribute('aria-hidden', 'true');
     ph.segs[i] = fillBar(bar, i);
@@ -63,9 +66,9 @@ function updatePhases(cd, rows) {
   const i = ui.pvCyl, s = strokeOf(phaseOf(i)), deg = Math.round(cd);
   if (ph.cyl !== i) buildBand(i);
   if (ph.bs !== s) { mark(ph.band, s); ph.bs = s; }
-  setText(el.angleSub, `цикл ${deg}°`);
-  setText(el.angleStroke, `Ц${i + 1} — ${STROKES[s].name.toLowerCase()}`);
-  const vt = `цикл ${deg}°, цилиндр ${i + 1}: ${STROKES[s].name.toLowerCase()}`;
+  setText(el.angleSub, S.cycle(deg));
+  setText(el.angleStroke, S.cylStroke(i + 1, STROKES[s].name.toLowerCase()));
+  const vt = S.angleText(deg, i + 1, STROKES[s].name.toLowerCase());
   if (el.angleSlider.getAttribute('aria-valuetext') !== vt) el.angleSlider.setAttribute('aria-valuetext', vt);
   if (!rows) return;
   el.phases.style.setProperty('--x', pctOf(cd));
@@ -73,6 +76,7 @@ function updatePhases(cd, rows) {
     const sc = strokeOf(phaseOf(c));
     if (ph.s[c] === sc) continue;
     mark(ph.segs[c], sc); setText(ph.now[c], STROKES[sc].short); ph.s[c] = sc;
+    ph.rows[c].setAttribute('aria-label', S.phaseRow(c + 1, STROKES[sc].name.toLowerCase()));
   }
 }
 
