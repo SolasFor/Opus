@@ -5,8 +5,13 @@
  * (открыта одна) и лента во всю ширину; телефон <760 px — временная раскладка до M-05c. Какие панели показаны,
  * решает src/ui/layout.js (класс hid); ширины режимов совпадают с его BREAK.
  * Свои свойства: --bar-h (высота верхней панели), --gap, --tl-l/--tl-r (края ленты), --tl-h (высота ленты, ставит
- * layout.js), --rc (цвет ползунка), --c (цвет такта: классы .s-in, .s-co, .s-po, .s-ex). */
-:root{--bar-h:56px;--gap:12px;--tl-l:324px;--tl-r:364px;--tl-h:112px}
+ * layout.js), --rc (цвет ползунка), --c (цвет такта: классы .s-in, .s-co, .s-po, .s-ex).
+ * M-05d (§7 в 14_M05): рамка фокуса — outline 2 px акцентного цвета у кнопок и ссылок (у ползунка — на бегунке);
+ * сцена в фокусе с клавиатуры (#scene.kbd) — рамка .scene-ring по свободной области (--free-l/t/r/b ставит layout.js)
+ * с подсказкой клавиш. Цели не меньше 36 px на десктопе (точки шагов — 28×36 за счёт ::after, без сдвига раскладки)
+ * и не меньше 44 px на pointer: coarse. prefers-reduced-motion выключает переходы интерфейса. .sr-only — текст только
+ * для экранного диктора. */
+:root{--bar-h:56px;--gap:12px;--tl-l:324px;--tl-r:364px;--tl-h:112px;--free-l:0px;--free-t:0px;--free-r:100vw;--free-b:100vh}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0;background:var(--opus-bg);overflow:hidden;color:var(--opus-text);
   font-family:var(--font-ui);font-size:var(--fs-sm);line-height:1.4;
@@ -26,7 +31,16 @@ kbd{display:inline-block;min-width:20px;padding:3px 5px;margin-left:6px;border-r
 .scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgb(255 255 255 / .14) transparent}
 .scroll::-webkit-scrollbar{width:6px}
 .scroll::-webkit-scrollbar-thumb{background:rgb(255 255 255 / .14);border-radius:99px}
-button:focus-visible,input:focus-visible,#scene:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+#scene:focus-visible{outline:none}
+button:focus-visible,a[href]:focus-visible{outline:2px solid var(--opus-accent);outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.scene-ring{display:none;position:fixed;z-index:2;left:var(--free-l);top:var(--free-t);width:calc(var(--free-r) - var(--free-l));
+  height:calc(var(--free-b) - var(--free-t));border:2px solid var(--opus-accent);border-radius:var(--radius-lg);pointer-events:none;
+  box-shadow:inset 0 0 0 2px rgb(11 14 19 / .5)}
+#scene.kbd ~ .scene-ring{display:block}
+.scene-ring span{position:absolute;top:var(--sp-2);left:50%;transform:translateX(-50%);max-width:calc(100% - 16px);padding:6px var(--sp-3);
+  border-radius:999px;background:var(--opus-surface-strong);color:var(--opus-text);font-size:var(--fs-xs);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* ---------- поверхности ---------- */
 .panel{position:fixed;z-index:6;background:var(--opus-surface-strong);border:1px solid var(--opus-line);border-radius:var(--radius-lg);
@@ -60,7 +74,7 @@ button:focus-visible,input:focus-visible,#scene:focus-visible{outline:none;box-s
 .cut-row .val{min-width:118px}
 .iso-chip{height:40px;padding:0 4px 0 12px;border-radius:999px;border:1px solid rgb(255 180 84 / .6);background:rgb(255 180 84 / .14);color:#ffe2bd;font-weight:600}
 .iso-chip b{color:#fff}
-.iso-chip .btn.icon{height:32px;width:32px;min-width:32px;border-radius:999px}
+.iso-chip .btn.icon{height:36px;width:36px;min-width:36px;border-radius:999px}
 /* разрез и изоляция вместе не помещаются в верхнюю панель: тогда фишка изоляции (на ширине <1400 — обе) висит под ней по центру */
 .cut-row.open + .iso-chip{position:absolute;top:calc(100% + var(--sp-2));left:50%;transform:translateX(-50%);background:rgb(40 32 22 / .94);box-shadow:var(--shadow-panel)}
 
@@ -121,6 +135,7 @@ input.warm{--rc:var(--opus-accent-2)}
 .sec-h .chev{color:var(--opus-text-muted);transition:transform var(--dur-fast) var(--ease)}
 .sec-h[aria-expanded=false] .chev{transform:rotate(-90deg)}
 .sec-hd .btn{margin-right:var(--sp-2)}
+.sec-h:focus-visible{outline-offset:-2px}
 .sec-b{padding:0 var(--sp-4) var(--sp-4)}
 .sec-b[hidden]{display:none}
 .sub-h{display:flex;align-items:center;justify-content:space-between;margin:var(--sp-3) 0 var(--sp-2);font-size:var(--fs-xs);font-weight:650;color:var(--opus-text-muted)}
@@ -132,6 +147,7 @@ input.warm{--rc:var(--opus-accent-2)}
 .dot::before{content:"";position:absolute;left:0;right:0;top:5px;height:6px;border-radius:99px;background:rgb(255 255 255 / .14);transition:background var(--dur-base) var(--ease)}
 .dot:hover::before{background:rgb(255 255 255 / .34)}
 .dot.done::before{background:rgb(77 163 255 / .55)}
+.dot::after{content:"";position:absolute;inset:-10px -3px}
 .dot.now{width:30px}
 .dot.now::before{background:var(--opus-accent)}
 .step-title{margin:var(--sp-2) 0 2px;font-size:var(--fs-md);font-weight:700}
@@ -162,10 +178,10 @@ input.warm{--rc:var(--opus-accent-2)}
 canvas.chart{display:block;width:100%;border-radius:var(--radius-md);background:rgb(0 0 0 / .22);border:1px solid var(--opus-line);cursor:pointer}
 .fire{display:flex;align-items:center;gap:6px;margin-top:var(--sp-3);font-size:var(--fs-xs);color:var(--opus-text-muted)}
 .fire span{margin-right:var(--sp-1)}
-.fire .chip{height:32px;min-width:32px;padding:0 10px;justify-content:center;font-variant-numeric:tabular-nums}
+.fire .chip{height:36px;min-width:36px;padding:0 10px;justify-content:center;font-variant-numeric:tabular-nums}
 .fire .chip.hot{border-color:var(--stroke-power);color:#ffd2b0;background:rgb(255 138 61 / .16)}
 .fire .chip[aria-pressed=true]{box-shadow:inset 0 0 0 1px #fff}
-.fire i{font-style:normal;opacity:.4}
+.fire i{font-style:normal}
 .legend{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-3);margin-top:var(--sp-3);font-size:var(--fs-xs);color:var(--opus-text-muted)}
 .legend span{display:inline-flex;align-items:center}
 .legend b{display:inline-grid;place-items:center;width:16px;height:16px;margin-right:5px;border-radius:4px;background:var(--c);color:#0d1117;font:700 10px/1 var(--font-ui)}
@@ -190,6 +206,7 @@ canvas.chart{display:block;width:100%;border-radius:var(--radius-md);background:
 .tick.first{transform:none}.tick.last{transform:translateX(-100%)}
 .s-in{--c:var(--stroke-intake)}.s-co{--c:var(--stroke-compression)}.s-po{--c:var(--stroke-power)}.s-ex{--c:var(--stroke-exhaust)}
 .panel-foot{display:flex;justify-content:flex-end;padding:6px var(--sp-4) 10px;border-top:1px solid var(--opus-line)}
+.panel-foot[hidden]{display:none}
 #fps{font:600 10px/1 var(--font-mono);color:#6f7d8f;white-space:nowrap}
 
 /* ---------- лента времени ---------- */
@@ -313,7 +330,21 @@ html.clean #toast{bottom:22px}
   .panel{backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 @media (pointer:coarse){
-  .btn.sm,.chip{height:var(--hit);min-width:var(--hit)}
+  .btn.sm,.chip,.fire .chip{height:var(--hit);min-width:var(--hit)}
   .btn.sm.icon{width:var(--hit)}
   .scrub{margin-top:10px}
+  .seg button,.menu button,.ph-row{height:var(--hit)}
+  .iso-chip{height:52px}
+  .iso-chip .btn.icon{height:var(--hit);width:var(--hit);min-width:var(--hit)}
+  .dots{gap:0}
+  .dot,.dot.now{flex:1;width:auto;height:var(--hit)}
+  .dot::before{left:3px;right:3px;top:calc(50% - 3px)}
+  .dot::after{display:none}
+  input[type=range]{height:var(--hit);padding:19px 0}
+  .link{min-height:var(--hit);display:inline-flex;align-items:center}
+}
+@media (prefers-reduced-motion:reduce){
+  *,::before,::after{transition-duration:0s!important;transition-delay:0s!important;animation-duration:0s!important;
+    animation-iteration-count:1!important;scroll-behavior:auto!important}
+  .spinner{animation-duration:2.4s!important;animation-iteration-count:infinite!important}
 }

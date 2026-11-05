@@ -3,6 +3,7 @@
  * M-02c: из подраздела «explode / steps» Engine/src/main.js, дословно. Совпадение со строками main.js@a463fb8
  * проверяет tests/split-sync.test.js.
  * Режим шагов — в ui/steps.js: gotoStep() вызывает камеру, а камера — boundsWith(), поэтому они в разных модулях.
+ * M-05d: при prefers-reduced-motion узлы встают по ползунку сразу, без сглаживания (ui/motion.js).
  */
 import * as THREE from 'three';
 import { clamp01 } from '../sim/math.js';
@@ -10,6 +11,7 @@ import { Ease } from '../anim/tween.js';
 import { engineRoot } from '../render/scene.js';
 import { nodesList } from '../render/parts/nodes.js';
 import { ui } from './state.js';
+import { reducedMotion } from './motion.js';
 
 /* ---------- explode / steps ---------- */
 function meanProgress() { return nodesList.reduce((a, n) => a + n.userData.progress, 0) / nodesList.length; }
@@ -23,7 +25,7 @@ function applyExplode() {
 }
 function smoothExplode(dt) {
   if (ui.stepMode) return;
-  const k = 1 - Math.exp(-dt * 9);
+  const k = reducedMotion() ? 1 : 1 - Math.exp(-dt * 9);
   for (const n of nodesList) {
     const ud = n.userData;
     ud.progress += (ui.explode - ud.progress) * k;
