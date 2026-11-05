@@ -30,6 +30,7 @@ const speedText = (e, rpm) => times(e, e < 1 ? 2 : 1) + ' · ' + unit(rpm, 'об
 const S = {
   run: 'Запустить', pause: 'Пауза', isolateBtn: 'Изолировать', showAll: 'Показать всё',
   hidePanels: 'Скрыть панели', showPanels: 'Показать панели',
+  sheetHandle: { min: 'Развернуть шторку', half: 'Развернуть шторку на весь экран', full: 'Свернуть шторку' },
   assembled: 'собран', exploded: 'разобран',
   stepShort: (i, n) => `шаг ${i}/${n}`, stepOf: (i, n) => `шаг ${i} из ${n}`, notStarted: 'не начата',
   stepDot: (i, title) => `Шаг ${i}: ${title}`,

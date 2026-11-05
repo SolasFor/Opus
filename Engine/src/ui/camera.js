@@ -9,6 +9,8 @@
  * камеру и цель в плоскости экрана, zoomBy() приближает и отдаляет в пределах minDistance…maxDistance OrbitControls.
  * Шаг — сразу, без анимации: повтор клавиши даёт плавное движение. Длительность перелётов — через motion()
  * (ui/motion.js): при prefers-reduced-motion не дольше 150 мс.
+ * M-05c: на телефоне (режим шторки) «Приблизить» отодвигает камеру по focusDistance() (ui/free-area.js): деталь
+ * целиком в области над шторкой.
  */
 import * as THREE from 'three';
 import { Ease, tween } from '../anim/tween.js';
@@ -16,8 +18,8 @@ import { CAM_HOME, TGT_HOME, V3 } from '../render/world.js';
 import { camera, controls } from '../render/scene.js';
 import { ui } from './state.js';
 import { boundsWith } from './explode.js';
-import { freeArea } from './layout.js';
-import { viewShift, fitDistance, toFreeNdc, homeScale } from './free-area.js';
+import { freeArea, sheetMode } from './layout.js';
+import { viewShift, fitDistance, toFreeNdc, homeScale, focusDistance } from './free-area.js';
 import { motion, reducedMotion } from './motion.js';
 
 /* ---------- camera ---------- */
@@ -73,7 +75,8 @@ function focusOn(node) {
   const c = box.getCenter(new THREE.Vector3());
   const r = box.getSize(new THREE.Vector3()).length() / 2;
   const dir = camera.position.clone().sub(controls.target).normalize();
-  tweenCamera(c.clone().addScaledVector(dir, Math.max(r * 2.3, 2.6)), c, 1.0);
+  const d = focusDistance(r, camera.fov, innerWidth, innerHeight, freeArea(), sheetMode());   // M-05c: телефон
+  tweenCamera(c.clone().addScaledVector(dir, d), c, 1.0);
 }
 
 /* ---------- камера с клавиатуры (M-05d) ---------- */
