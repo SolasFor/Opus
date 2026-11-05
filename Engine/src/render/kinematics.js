@@ -2,6 +2,8 @@
  * клапаны и пружины, ремень ГРМ и ролик.
  * M-02b: раздел 7 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
  * проверяет tests/split-sync.test.js.
+ * M-07d: привод навесного оборудования — шкив генератора, ролик натяжителя и метка поликлинового ремня (accDrive()
+ * из render/drive.js).
  */
 import * as THREE from 'three';
 import { DEG, FIRE_DEG, CRANK_Y, CRANK_R, ROD_L, CAM_LIFT } from '../config/engine-spec.js';
@@ -12,7 +14,9 @@ import { crankGroup } from './parts/crankshaft.js';
 import { rodMeshes } from './parts/rods.js';
 import { pistonMeshes } from './parts/pistons.js';
 import { valveMeshes, springMeshes, camShafts, valves, SPRING_BASE, SPRING_TOP } from './parts/valvetrain.js';
-import { beltMat, idlerGroup, BELT_PITCH } from './parts/belt.js';
+import { beltMat, idlerGroup, BELT_PITCH, accBeltMat, accIdler, accTex } from './parts/belt.js';
+import { altRotor } from './parts/accessories.js';
+import { accDrive } from './drive.js';
 
 const sim = {
   theta: 0,                // crank angle, rad (unbounded); cycle angle = θ mod 4π
@@ -60,6 +64,11 @@ function updateKinematics() {
   // belt teeth travel at the crank sprocket pitch speed; idler spins at v / r
   if (beltMat) beltMat.map.offset.x = th * R_CRANK_SPR / BELT_PITCH;
   if (idlerGroup) idlerGroup.rotation.x = th * R_CRANK_SPR / IDLER.r;
+  // M-07d: поликлиновой ремень идёт со скоростью обода демпфера; генератор и ролик — v / r, ролик по спинке — обратно
+  const acc = accDrive(th);
+  if (altRotor) altRotor.rotation.x = acc.alt;
+  if (accIdler) accIdler.rotation.x = acc.idler;
+  if (accBeltMat) accBeltMat.map.offset.x = acc.s / accTex;
 }
 
 export { sim, _m4, _p, _s, _qI, cycDeg, phaseOf, updateKinematics };

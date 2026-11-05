@@ -10,6 +10,8 @@
  * hw (металл) или paintHw (краска), поэтому эти ключи сами в сцену не попадают.
  * M-07c: поковки (forged: щёки коленвала, маховик, шатуны), точёный поршень (piston); ключи-цвета hole (тёмные
  * заглушки — вид сверлений и облегчающих отверстий) и carbon (нагар на тарелках клапанов).
+ * M-07d: поликлиновой ремень навесного оборудования (polyBelt) — резина с меткой на спинке; шаг метки по u, в нижней
+ * строке текстуры метки нет (рёбра и боковины ремня).
  */
 import * as THREE from 'three';
 import { cutPlane, CAP } from './scene.js';
@@ -47,6 +49,12 @@ function createMaterials() {
     g.fillStyle = 'rgba(255,255,255,0.05)'; g.fillRect(w * 0.5, 0, w * 0.06, h);
   }, 64, 8);
   beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping;
+  // M-07d: поликлиновой ремень — метка на спинке посередине ширины, один шаг на текстуру
+  const polyTex = stripeTexture((g, w, h) => {
+    g.fillStyle = '#141517'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#4a4e54'; [[0.06, 0.12], [0.22, 0.05], [0.31, 0.16]].forEach(([x, l]) => g.fillRect(w * x, h * 0.375, w * l, h * 0.25));
+  }, 64, 16);
+  polyTex.wrapS = THREE.RepeatWrapping;
 
   M = {
     // корпусные отливки: чугун, алюминий (песчаная форма и литьё под давлением)
@@ -80,6 +88,7 @@ function createMaterials() {
     pipe2:    S(std({ color: 0x8e9196, metalness: 1.00, roughness: 0.42 }), 'castFine'),
     shield:   S(std({ color: 0xaeb2b6, metalness: 1.00, roughness: 0.40 }), 'shield'),   // M-07b: штампованный теплоэкран
     belt:     S(std({ color: 0xffffff, map: beltTex, metalness: 0.0, roughness: 0.78 }), 'rubber'),
+    polyBelt: S(std({ color: 0xffffff, map: polyTex, metalness: 0.0, roughness: 0.74 }), 'rubber'),   // M-07d
     rubber:   S(std({ color: 0x151618, metalness: 0.0, roughness: 0.82 }), 'rubber'),
     // M-07b: крепёж и мелочь узла — общий материал с цветом вершин и ключи-цвета для него
     hw:       S(std({ color: 0xffffff, vertexColors: true, metalness: 1.00, roughness: 0.40 }), 'forged'),

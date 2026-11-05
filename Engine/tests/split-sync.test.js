@@ -105,7 +105,7 @@ const CHANGED = {
   'render/parts/sparks.js': 'M-07c',
   'render/parts/nodes.js': 'M-07c',
   'render/scene.js': 'M-07a',
-  'render/materials.js': 'M-07a',
+  'render/materials.js': 'M-07a, M-07d',
   'render/parts/geometry.js': 'M-07a',
   'ui/controls.js': 'M-07a, M-05b',
   'ui/charts/pv.js': 'M-05a, M-05b',
@@ -116,6 +116,8 @@ const CHANGED = {
   'ui/steps.js': 'M-05b',
   'ui/input.js': 'M-05b',
   'ui/charts/canvas.js': 'M-05b',
+  'render/parts/belt.js': 'M-07d',
+  'render/kinematics.js': 'M-07d',
 };
 // M-05b и дальше: модуль → [этап, чем заменён, имена верхнего уровня, которые он объявлял]
 const REMOVED = {
