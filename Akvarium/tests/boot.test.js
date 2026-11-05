@@ -1,5 +1,5 @@
 /**
- * Экран запуска аквариума (A-01): встроенный классический скрипт Akvarium/Aquarium.html в node:vm с поддельным DOM.
+ * Экран запуска аквариума (A-01): встроенный классический скрипт модульной версии Akvarium (index.html, styles/app.css, src/main.js) в node:vm с поддельным DOM.
  * Состояния (data-boot у <html>): booting → ready | failed; slow — мягкое уведомление через 15 с, не ошибка;
  * lost — потерян WebGL-контекст после запуска. Первая причина сбоя побеждает, после ready сбой запуска не объявляется.
  * Модуль не загрузился (onerror) — сразу сообщение о CDN и кнопка «Повторить». Плюс статические проверки разметки
@@ -8,10 +8,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { HTML } from './_app.js';   // модульная версия, собранная в один текст (A-01b)
 
-const HTML = readFileSync(new URL('../Aquarium.html', import.meta.url), 'utf8');
 const scripts = [...HTML.matchAll(/<script>\n([\s\S]*?)<\/script>/g)].map(m => m[1]);
 const MODULE = HTML.match(/<script type="module"[^>]*>\n([\s\S]*?)<\/script>/)[1];
 const IMPORTMAP = JSON.parse(HTML.match(/<script type="importmap">\n([\s\S]*?)<\/script>/)[1]);
@@ -217,7 +216,7 @@ test('потеря контекста: lost, через 10 с failed; restore �
   assert.match(lost, /setTimeout\([\s\S]*__aqScreen\('failed'[\s\S]*\['reload'\]\), 10000\)/);
   const rest = MODULE.match(/addEventListener\('webglcontextrestored', \(\) => \{[\s\S]*?\n\}\);/)[0];
   assert.match(rest, /clearTimeout\(run\.timer\)/);
-  assert.match(rest, /ENV = makeEnv\(\);/);
+  assert.match(rest, /storeEnv\(makeEnv\(\)\);/);   // шов A-01b: ENV объявлен в creatures.js
   assert.match(rest, /for \(const m of FISH_MATS\) m\.envMap = ENV;/);
   assert.match(rest, /run\.lost = false;/);
   assert.match(rest, /__aqScreen\(booted \? 'ready' : 'booting'\)/);

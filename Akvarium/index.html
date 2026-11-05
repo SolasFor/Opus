@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Аквариум</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='7' fill='%23071a26' stroke='%235fd3ff' stroke-width='2'/%3E%3Cpath d='M6 16c4-6 12-7 17 0-5 7-13 6-17 0z' fill='%23ffb347'/%3E%3Cpath d='M22.5 16l5-4v8z' fill='%23ffb347'/%3E%3Ccircle cx='10.5' cy='14.6' r='1.3' fill='%23071a26'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./styles/app.css">
+</head>
+<body>
+<div id="boot"><div class="bubs" aria-hidden="true"><span class="b"></span><span class="b"></span><span class="b"></span></div><div id="bootmsg" aria-live="polite">Наполняем аквариум…</div><div id="bootact" hidden></div></div>
+<script>
+  /* A-01: экран запуска. Состояние — атрибут data-boot у <html>: booting → ready | failed; slow — мягкое уведомление
+     через 15 с (не ошибка); после запуска lost — потерян WebGL-контекст. Классический скрипт: работает, даже когда
+     модуль с three.js не загрузился. Побеждает первая причина сбоя; после ready сбой запуска не объявляется.
+     Если первый кадр всё же отрисован (ошибка была не в аквариуме, а, например, в расширении браузера), ready скрывает экран.
+     Устроен как экран запуска Engine/index.html (M-03); проверки — Akvarium/tests/boot.test.js. */
+  (function () {
+    var LABEL = { retry: 'Повторить', refresh: 'Обновить', reload: 'Перезагрузить' };
+    var BOOT = 'Наполняем аквариум…';
+    var CDN = 'Библиотека Three.js не загрузилась с CDN (unpkg.com). Проверьте подключение к интернету и нажмите «Повторить».';
+    var root = document.documentElement, timer = 0;
+    var esc = window.__aqEsc = function (s) {
+      return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+    };
+    var screen = window.__aqScreen = function (state, html, acts) {
+      var box = document.getElementById('boot'), msg = document.getElementById('bootmsg'), act = document.getElementById('bootact');
+      root.setAttribute('data-boot', state);
+      clearTimeout(timer);
+      if (state === 'ready') {   // плавно скрыть; элемент остаётся для сообщений после запуска
+        box.classList.add('gone');
+        timer = setTimeout(function () { box.hidden = true; }, 1500);
+        return;
+      }
+      box.hidden = false; box.classList.remove('gone');
+      if (state === 'failed') box.classList.add('err'); else box.classList.remove('err');
+      box.querySelector('.bubs').hidden = state === 'failed';
+      msg.innerHTML = html || BOOT;
+      act.innerHTML = (acts || []).map(function (a) {
+        return '<button type="button" onclick="location.reload()">' + LABEL[a] + '</button>';
+      }).join('');
+      act.hidden = !act.innerHTML;
+    };
+    /* why — HTML-текст причины (по умолчанию — CDN), acts — кнопки: retry | refresh | reload */
+    var fail = window.__aqFail = function (why, acts) {
+      if (window.__ok || window.__aqFailed) return;
+      window.__aqFailed = true;
+      screen('failed', '<b>Не удалось запустить аквариум.</b><br><span class="why">' + (why || CDN) + '</span>', acts || ['retry']);
+    };
+    /* модуль не загрузился (onerror у <script type="module">): внешние у него только three.js и аддоны с unpkg */
+    window.__aqModuleError = function () { fail(CDN, ['retry']); };
+    window.addEventListener('error', function (e) {
+      if (e && e.message) fail('Ошибка при запуске: ' + esc(e.message), ['reload']);
+    });
+    setTimeout(function () {
+      if (!window.__ok && !window.__aqFailed && root.getAttribute('data-boot') === 'booting') screen('slow', 'Загрузка идёт дольше обычного… Возможно, соединение медленное или CDN (unpkg.com) ' +
+        'отвечает с задержкой. Можно подождать или обновить страницу.', ['refresh']);
+    }, 15000);
+    root.setAttribute('data-boot', 'booting');
+  })();
+</script>
+<div id="vignette"></div>
+<canvas id="grainSrc" width="1" height="1" style="display:none"></canvas>
+<div id="grain"></div>
+<div id="hint">клик — корм · зажми — сыпать · двойной клик по рыбе — следить · правый клик — стук по стеклу · <b style="font-weight:600">H</b> — панель</div>
+<div id="fps"></div>
+<div id="tip"></div>
+<div id="follow"></div>
+<div id="flash"></div>
+<button id="open" title="Показать панель (H)">☰</button>
+<div id="panel"></div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="./src/main.js" onerror="window.__aqModuleError()"></script>
+</body>
+</html>

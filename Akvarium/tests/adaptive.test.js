@@ -1,5 +1,5 @@
 /**
- * Адаптивное разрешение аквариума (A-01): чистая функция adaptStep из Akvarium/Aquarium.html.
+ * Адаптивное разрешение аквариума (A-01): чистая функция adaptStep из модульной версии Akvarium (index.html, styles/app.css, src/main.js).
  * Тест вырезает блок между метками «// @pure adaptStep begin» и «// @pure adaptStep end» и выполняет его в node:vm —
  * поэтому в блоке не должно быть DOM, three.js и состояния страницы. Прежнее поведение (только вниз: fps < 45 два окна
  * подряд — pixelRatio −0.25, не ниже 0.75) сохранено; новое — подъём обратно с гистерезисом. Плюс статические проверки
@@ -8,10 +8,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { HTML } from './_app.js';   // модульная версия, собранная в один текст (A-01b)
 
-const HTML = readFileSync(new URL('../Aquarium.html', import.meta.url), 'utf8');
 const BEGIN = '// @pure adaptStep begin\n', END = '// @pure adaptStep end\n';
 const BLOCK = HTML.slice(HTML.indexOf(BEGIN) + BEGIN.length, HTML.indexOf(END));
 const { ADAPT, ADAPT0, adaptStep } = vm.runInNewContext(`${BLOCK}\n;({ ADAPT, ADAPT0, adaptStep })`, { Math, Infinity });
