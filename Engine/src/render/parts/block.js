@@ -6,12 +6,15 @@
  * вкладышами и болтами, сальники, поддон-оболочка с картером, фланцем и пробкой, опоры, фильтр, датчик детонации, щуп.
  * Стенки блока и поддона — оболочки, поэтому в разрезе штриховка идёт только по металлу. Крепёж и мелочь —
  * ключи-цвета (M.bolt, M.fitting и др.): один меш на узел.
+ * M-07d: навесное оборудование на блоке — генератор и стартер (render/parts/accessories.js) в том же меше и из тех же
+ * материалов, ротор генератора — отдельная группа.
  */
 import * as THREE from 'three';
 import { BORE_R, CRANK_Y } from '../../config/engine-spec.js';
 import { CYL_X, BLOCK_Y0, CRANK_TOP, DECK_Y } from '../world.js';
 import { M } from '../materials.js';
 import { G, extrudeXb, extrudeY, extrudeZ, Parts, roundRect, holePath, poly } from './geometry.js';
+import { buildAccessories } from './accessories.js';
 
 /* ---------- 6.1 BLOCK ---------- */
 const MAINS = [-2.2, -1.1, 0, 1.1, 2.2];
@@ -116,6 +119,7 @@ function buildBlock(g) {
   P.add(G.cyl(0.03, 0.03, 0.06, 12), M.fitting, [-0.25, 2.03, -(D + 0.08)]);
   P.add(G.torusY(0.05, 0.016, 8, 20), M.paintRed, [-0.25, 2.12, -(D + 0.08)], [Math.PI / 2, 0, 0]);
   P.add(G.rbox(0.05, 0.10, 0.08, 0.01), M.fitting, [-0.25, 1.75, -(D + 0.04)]);
+  buildAccessories(P, g);   // M-07d: генератор и стартер
   P.build(g, g);
   g.userData.anchor.set(-1.2, 1.9, 0.95);
 }

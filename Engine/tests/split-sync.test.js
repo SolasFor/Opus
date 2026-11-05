@@ -94,7 +94,7 @@ const WIRING_C = {
 const MOVES = [['ac34ff3', RENDER, WIRING_B], ['a463fb8', UI, WIRING_C]];
 // M-07a и дальше: модуль → этап, на котором его тело намеренно изменено после переноса
 const CHANGED = {
-  'render/parts/block.js': 'M-07b',
+  'render/parts/block.js': 'M-07b, M-07d',
   'render/parts/head.js': 'M-07b',
   'render/parts/intake.js': 'M-07b, M-07c',
   'render/parts/exhaust.js': 'M-07b, M-07c',
@@ -105,7 +105,7 @@ const CHANGED = {
   'render/parts/sparks.js': 'M-07c',
   'render/parts/nodes.js': 'M-07c',
   'render/scene.js': 'M-07a',
-  'render/materials.js': 'M-07a',
+  'render/materials.js': 'M-07a, M-07d',
   'render/parts/geometry.js': 'M-07a',
   'ui/controls.js': 'M-07a, M-05b',
   'ui/charts/pv.js': 'M-05a, M-05b',
@@ -116,6 +116,8 @@ const CHANGED = {
   'ui/steps.js': 'M-05b',
   'ui/input.js': 'M-05b',
   'ui/charts/canvas.js': 'M-05b',
+  'render/parts/belt.js': 'M-07d',
+  'render/kinematics.js': 'M-07d',
 };
 // M-05b и дальше: модуль → [этап, чем заменён, имена верхнего уровня, которые он объявлял]
 const REMOVED = {

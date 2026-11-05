@@ -1,13 +1,18 @@
 /* Деталь «Ремень ГРМ и натяжной ролик»: buildBelt().
  * M-02b: подраздел 6.10 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
  * проверяет tests/split-sync.test.js.
+ * M-07d: поликлиновой ремень навесного оборудования (6 рёбер внутрь, спинка наружу) по петле beltLoop() из
+ * render/drive.js — шкив демпфера, шкив генератора, ролик натяжителя по спинке; на спинке метка, на длину петли целое
+ * число её шагов (markPeriod), шов не виден. Натяжитель: корпус пружины на передней стенке блока, рычаг за плоскостью
+ * ремня, ролик accIdler. Рычаг и корпус — в том же меше, что кронштейн ролика ГРМ, и из тех же материалов.
  */
 import * as THREE from 'three';
 import { DEG, CRANK_Y } from '../../config/engine-spec.js';
 import { clamp } from '../../sim/math.js';
 import { CAM_Y, CAM_Z, BELT_X, R_CRANK_SPR, R_CAM_SPR, IDLER } from '../world.js';
 import { M } from '../materials.js';
-import { G, Parts, nodeMat } from './geometry.js';
+import { G, extrudeXb, Parts, nodeMat, detail } from './geometry.js';
+import { ACC_X, BELT_W, BELT_T, RIB_H, IDLER_R, DRIVE, beltLoop, markPeriod } from '../drive.js';
 
 /* ---------- 6.10 TIMING BELT + IDLER ---------- */
 let beltMat = null, idlerGroup = null, beltLength = 1;
@@ -103,8 +108,70 @@ function buildBelt(g) {
   const BP = new Parts();
   BP.add(G.box(0.06, 0.42, 0.10), M.steelDark, [BELT_X - 0.1, IDLER.y - 0.18, IDLER.z - 0.05], [0, 0, 0]);
   BP.add(G.cylX(0.05, 0.12, 12), M.chrome, [BELT_X - 0.1, IDLER.y - 0.36, IDLER.z - 0.05]);
+  buildAccBelt(g, BP);   // M-07d
   BP.build(g, g);
   g.userData.anchor.set(BELT_X, CAM_Y + 0.5, 0);
 }
 
-export { beltMat, idlerGroup, BELT_PITCH, buildBelt };
+/* ---------- M-07d ACCESSORY DRIVE BELT + TENSIONER ---------- */
+let accBeltMat = null, accIdler = null, accTex = 1;
+const TENS = { u: 0.80, v: 0.70, x: 2.645 };      // ось рычага натяжителя; плоскость рычага — между ремнями
+/* сечение ремня (x поперёк, h по нормали наружу петли) по часовой стрелке: спинка, правая боковина, 6 рёбер справа
+ * налево, левая боковина замыкает контур */
+function accSection() {
+  const w = BELT_W / 2, p = BELT_W / 6, out = [[-w, BELT_T], [w, BELT_T], [w, 0]];
+  for (let k = 5; k >= 0; k--) { const x0 = -w + k * p; out.push([x0 + p * 0.64, -RIB_H], [x0 + p * 0.36, -RIB_H], [x0, 0]); }
+  return out;
+}
+function buildAccBelt(g, BP) {
+  const loop = beltLoop(DRIVE, detail.low ? 12 : 6), sec = accSection(), pts = loop.pts;
+  accTex = markPeriod(loop.length);
+  const col = [...pts, { ...pts[0], s: loop.length }];
+  const pos = [], nor = [], uv = [], idx = [];
+  // у каждой грани сечения свои вершины: кромки рёбер резкие, вдоль петли нормали плавные
+  sec.forEach((A, e) => {
+    const B = sec[(e + 1) % sec.length], dx = B[0] - A[0], dh = B[1] - A[1], l = Math.hypot(dx, dh), base = pos.length / 3;
+    col.forEach(p => [[A, 0], [B, 1]].forEach(([[x, h], t]) => {
+      pos.push(ACC_X + x, p.v + p.nv * h, p.u + p.nu * h);
+      nor.push(-dh / l, p.nv * dx / l, p.nu * dx / l);
+      uv.push(p.s / accTex, e === 0 ? t : 0);
+    }));
+    for (let i = 0; i < pts.length; i++) { const a = base + i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  const mesh = new THREE.Mesh(geo, nodeMat(g, M.polyBelt));
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  g.add(mesh);
+  accBeltMat = mesh.material;
+  accBeltMat.map = accBeltMat.map.clone();
+  accBeltMat.map.needsUpdate = true;
+  // ролик натяжителя по спинке: гладкий обод с буртиками, ступица, отверстия в диске — видно вращение
+  const idl = DRIVE[2], ri = IDLER_R;
+  accIdler = new THREE.Group();
+  accIdler.position.set(ACC_X, idl.v, idl.u);
+  g.add(accIdler);
+  const RP = new Parts();
+  RP.add(G.latheX([[0, -0.095], [ri + 0.008, -0.095], [ri + 0.008, -0.085], [ri, -0.08], [ri, 0.08], [ri + 0.008, 0.085],
+    [ri + 0.008, 0.095], [0.062, 0.095], [0.06, 0.09], [0, 0.09]], 36), M.steel);
+  RP.add(G.cylX(0.045, 0.21, 20), M.dark, [0.005, 0, 0]);
+  for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2;
+    RP.add(G.cylX(0.012, 0.012, 10), M.dark, [0.092, Math.cos(a) * 0.072, Math.sin(a) * 0.072]); }
+  RP.build(accIdler, g);
+  // рычаг (за плоскостью ремня), корпус пружины на передней стенке блока, болты оси рычага и оси ролика
+  const arm = new THREE.Shape(), a0 = [-TENS.u, TENS.v], a1 = [-idl.u, idl.v], f = Math.atan2(a1[1] - a0[1], a1[0] - a0[0]);
+  arm.absarc(a1[0], a1[1], 0.055, f - Math.PI / 2, f + Math.PI / 2, false);
+  arm.absarc(a0[0], a0[1], 0.075, f + Math.PI / 2, f + Math.PI * 1.5, false);
+  BP.add(extrudeXb(arm, 0.04, 16, 0.008), M.steelDark, [TENS.x, 0, 0]);
+  BP.add(G.latheX([[0, 0], [0.10, 0], [0.10, 0.03], [0.085, 0.035], [0.085, 0.20, 1], [0.105, 0.21], [0.105, 0.25], [0, 0.25]], 32),
+    M.steelDark, [TENS.x - 0.27, TENS.v, TENS.u]);
+  BP.add(G.rbox(0.05, 0.05, 0.07, 0.01), M.steelDark, [TENS.x - 0.06, TENS.v + 0.1, TENS.u + 0.07]);
+  BP.bolt(M.chrome, [TENS.x + 0.02, TENS.v, TENS.u], 'x', 0.04, 0.03);
+  BP.add(G.cylX(0.03, 0.06, 12), M.chrome, [TENS.x + 0.04, idl.v, idl.u]);
+  BP.bolt(M.chrome, [ACC_X + 0.105, idl.v, idl.u], 'x', 0.032, 0.025);
+}
+
+export { beltMat, idlerGroup, BELT_PITCH, buildBelt, accBeltMat, accIdler, accTex };
