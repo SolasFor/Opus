@@ -5,6 +5,10 @@
  * M-05b: предустановки — пункты меню «Камера» (#camMenu, aria-checked у выбранной). Центр кадра — в свободной
  * области между панелями (П-4): applyViewShift() сдвигает его через camera.setViewOffset (плавно при показе и скрытии
  * панелей), distFor() и fitIfNeeded() считают по пропорциям области, homePosition() — стартовый кадр.
+ * M-05d: камера с клавиатуры (сцена в фокусе после Tab, ui/input.js): orbitBy() вращает вокруг цели, panBy() сдвигает
+ * камеру и цель в плоскости экрана, zoomBy() приближает и отдаляет в пределах minDistance…maxDistance OrbitControls.
+ * Шаг — сразу, без анимации: повтор клавиши даёт плавное движение. Длительность перелётов — через motion()
+ * (ui/motion.js): при prefers-reduced-motion не дольше 150 мс.
  */
 import * as THREE from 'three';
 import { Ease, tween } from '../anim/tween.js';
@@ -14,12 +18,14 @@ import { ui } from './state.js';
 import { boundsWith } from './explode.js';
 import { freeArea } from './layout.js';
 import { viewShift, fitDistance, toFreeNdc, homeScale } from './free-area.js';
+import { motion, reducedMotion } from './motion.js';
 
 /* ---------- camera ---------- */
 function tweenCamera(pos, target, dur = 1.0, delay = 0) {
   if (ui.camTw) ui.camTw.kill();
   let p0, t0;
-  ui.camTw = tween({ dur, delay, ease: Ease.inOutCubic,
+  const m = motion(dur, delay);
+  ui.camTw = tween({ dur: m.dur, delay: m.delay, ease: Ease.inOutCubic,
     onStart() { p0 = camera.position.clone(); t0 = controls.target.clone(); },
     onUpdate(k) { camera.position.lerpVectors(p0, pos, k); controls.target.lerpVectors(t0, target, k); },
     onComplete() { ui.camTw = null; } });
@@ -57,7 +63,7 @@ function setShift(x, y) {
 function applyViewShift(animate) {
   const to = viewShift(innerWidth, innerHeight, freeArea());
   if (shift.tw) { shift.tw.kill(); shift.tw = null; }
-  if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) { setShift(to.x, to.y); return; }
+  if (!animate || reducedMotion()) { setShift(to.x, to.y); return; }
   const x0 = shift.x, y0 = shift.y;
   shift.tw = tween({ dur: 0.35, ease: Ease.inOutCubic, onUpdate: k => setShift(x0 + (to.x - x0) * k, y0 + (to.y - y0) * k), onComplete() { shift.tw = null; } });
 }
@@ -70,4 +76,36 @@ function focusOn(node) {
   tweenCamera(c.clone().addScaledVector(dir, Math.max(r * 2.3, 2.6)), c, 1.0);
 }
 
-export { tweenCamera, frameBox, fitIfNeeded, cameraPreset, resetView, homePosition, applyViewShift, focusOn };
+/* ---------- камера с клавиатуры (M-05d) ---------- */
+const ORBIT_STEP = 5 * Math.PI / 180, PAN_STEP = 0.04, ZOOM_STEP = 1.12, POLAR_MIN = 0.02;
+function keyCam() {
+  if (ui.camTw) { ui.camTw.kill(); ui.camTw = null; }
+  ui.lastInteract = performance.now();
+}
+// dx, dy — число шагов: модель поворачивается вправо и на себя (вверх), как при перетаскивании мышью вправо и вверх
+function orbitBy(dx, dy) {
+  keyCam();
+  const off = camera.position.clone().sub(controls.target), s = new THREE.Spherical().setFromVector3(off);
+  s.theta -= dx * ORBIT_STEP;
+  s.phi = Math.min(controls.maxPolarAngle, Math.max(POLAR_MIN, s.phi + dy * ORBIT_STEP));
+  camera.position.copy(controls.target).add(off.setFromSpherical(s));
+  camera.lookAt(controls.target);
+}
+// модель на экране сдвигается вправо и вверх на долю расстояния до цели (камера и цель — в обратную сторону), как при
+// перетаскивании правой кнопкой
+function panBy(dx, dy) {
+  keyCam();
+  const d = camera.position.distanceTo(controls.target) * PAN_STEP;
+  const right = V3(1, 0, 0).applyQuaternion(camera.quaternion), up = V3(0, 1, 0).applyQuaternion(camera.quaternion);
+  const move = right.multiplyScalar(-dx * d).addScaledVector(up, -dy * d);
+  camera.position.add(move); controls.target.add(move);
+}
+// steps > 0 — ближе
+function zoomBy(steps) {
+  keyCam();
+  const off = camera.position.clone().sub(controls.target);
+  const len = Math.min(controls.maxDistance, Math.max(controls.minDistance, off.length() / Math.pow(ZOOM_STEP, steps)));
+  camera.position.copy(controls.target).addScaledVector(off.normalize(), len);
+}
+
+export { tweenCamera, frameBox, fitIfNeeded, cameraPreset, resetView, homePosition, applyViewShift, focusOn, orbitBy, panBy, zoomBy };

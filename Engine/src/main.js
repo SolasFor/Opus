@@ -17,6 +17,8 @@
  * если кадр медленный и при pixelRatio 1.
  * M-07c: уровень детализации «низкий» (lowDetail из src/render/quality.js) выбирается до buildEngine(); на нём нет AO.
  * M-06b: шаг адаптивного разрешения — adaptPR() из src/render/quality.js, с гистерезисом против качания уровней.
+ * M-05d: индикатор fps — только с ?debug (П-13); уведомления — из src/ui/strings.ru.js; при prefers-reduced-motion
+ * нет пролёта камеры при старте (src/ui/motion.js).
  */
 /* ============================================================================
  * ЧЕТЫРЁХТАКТНЫЙ ДВИГАТЕЛЬ — интерактивная 3D-разборка (рядная «четвёрка», DOHC 16V)
@@ -54,7 +56,9 @@ import { setView } from './ui/view.js';
 import { pick, select, isolate, setHover } from './ui/selection.js';
 import { updateLabels } from './ui/labels.js';
 import { updateMaterials } from './ui/highlight.js';
-import { setRunning, toggleRun, toast } from './ui/controls.js';
+import { touch, setRunning, toggleRun, toast } from './ui/controls.js';
+import { S, toastText } from './ui/strings.ru.js';
+import { reducedMotion } from './ui/motion.js';
 import { updateHud } from './ui/hud.js';
 import { initUI, onResize, setInputLifecycle } from './ui/input.js';
 
@@ -104,6 +108,7 @@ setEffectsSource(ui, effSpeed);             // M-02b: эффекты такто�
  * 11. ЦИКЛ РЕНДЕРА
  * ------------------------------------------------------------------------- */
 const perf = { frames: 0, t0: performance.now(), fps: 60, ad: ADAPT0, slow: 0, adaptive: !params.has('noadapt') };
+const DEBUG = params.has('debug');         // M-05d: ?debug показывает индикатор fps (П-13); E-28 — как раньше
 let lastTheta = 0;
 function adapt() {
   perf.frames++;
@@ -122,7 +127,7 @@ function adapt() {
       onResize();
     }
   }
-  el.fps.textContent = Math.round(perf.fps) + ' fps · ' + pixelRatio.toFixed(2).replace(/0$/, '') + '×' + (aoOn() ? ' · AO' : '');
+  if (DEBUG) el.fps.textContent = S.fps(perf.fps, pixelRatio, aoOn());   // M-05d: индикатор только с ?debug (П-13)
 }
 function frame(dt) {
   updateTweens(dt);
@@ -224,15 +229,17 @@ function boot() {
   sim.theta = 25 * DEG;
   lastTheta = sim.theta;
   initUI();
-  // intro: fly in from afar
+  el.fps.closest('.panel-foot').hidden = !DEBUG;
+  // intro: fly in from afar (M-05d: при prefers-reduced-motion — сразу стартовый кадр, без пролёта)
   const dir = CAM_HOME.clone().sub(TGT_HOME).normalize();
-  camera.position.copy(TGT_HOME).addScaledVector(dir, 34);
+  if (reducedMotion()) camera.position.copy(homePosition());
+  else camera.position.copy(TGT_HOME).addScaledVector(dir, 34);
   controls.update();
   frame(0.016);
   window.__engOk = true;
   if (!run.lost) window.__engScreen('ready');
-  tweenCamera(homePosition(), TGT_HOME.clone(), 2.3, 0.1);   // M-05b: стартовый кадр по свободной области (П-4)
-  setTimeout(() => toast('Клик по детали — описание · Space — запуск · ? — все клавиши', 5200), 1600);
+  if (!reducedMotion()) tweenCamera(homePosition(), TGT_HOME.clone(), 2.3, 0.1);   // M-05b: стартовый кадр по свободной области (П-4)
+  setTimeout(() => toast(toastText('welcome', touch()), 5200), 1600);   // M-05d: без клавиш на устройствах без клавиатуры
   loop();
 }
 // test hooks (used by the automated browser check; harmless for users)

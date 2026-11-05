@@ -7,6 +7,8 @@
  * M-07a: снимок экрана рисуется через renderFrame() (render/post.js) — с тем же AO, что на экране.
  * M-05b: кнопка запуска — значок и текст (runLabel), переключатели сообщают состояние через aria-pressed; скрытие
  * и раскладка панелей перенесены в ui/layout.js.
+ * M-05d: строки и числа — из ui/strings.ru.js (П-12): «×1,0 · 31 об/мин»; на устройствах без клавиатуры уведомления
+ * без упоминания клавиш (touch). Без вспышки снимка при prefers-reduced-motion (ui/motion.js).
  */
 import { DEG } from '../config/engine-spec.js';
 import { audio } from '../audio/engine-audio.js';
@@ -18,6 +20,10 @@ import { ui, effSpeed, el } from './state.js';
 import { meanProgress } from './explode.js';
 import { setView } from './view.js';
 import { runLabel } from './icons.js';
+import { speedText, toastText, shotSaved } from './strings.ru.js';
+import { reducedMotion } from './motion.js';
+
+const touch = () => matchMedia('(pointer: coarse)').matches;
 
 /* ---------- step UI / sliders ---------- */
 function setRange(r, v, pct) { if (document.activeElement !== r || !ui.scrubbing) r.value = v; r.style.setProperty('--p', pct + '%'); }
@@ -27,7 +33,9 @@ function updateSpeedUI() {
   sim.speed = speedFromSlider(v);
   el.speedSlider.style.setProperty('--p', v + '%');
   const e = effSpeed();
-  el.speedVal.textContent = '×' + (e < 1 ? e.toFixed(2) : e.toFixed(1)) + ' · ' + (e * BASE_RPM < 10 ? (e * BASE_RPM).toFixed(1) : Math.round(e * BASE_RPM)) + ' об/мин';
+  const s = speedText(e, e * BASE_RPM);
+  el.speedVal.textContent = s;
+  el.speedSlider.setAttribute('aria-valuetext', s);
 }
 function setRunning(v) {
   sim.running = v;
@@ -39,8 +47,8 @@ function toggleRun() {
   setRunning(!sim.running);
   if (sim.running) {
     audio.update(true, effSpeed());
-    if (ui.firstRun && ui.view === 'solid') { setView('cut'); toast('Включил разрез, чтобы были видны такты. Вид меняется клавишей X'); }
-    else if (meanProgress() > 0.15) toast('Механизм крутится и в разборке, а горение видно только в собранном двигателе');
+    if (ui.firstRun && ui.view === 'solid') { setView('cut'); toast(toastText('cutOn', touch())); }
+    else if (meanProgress() > 0.15) toast(toastText('explodedRun'));
     ui.firstRun = false;
   }
 }
@@ -64,9 +72,11 @@ function screenshot() {
   a.download = `dvigatel-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.png`;
   a.href = url;
   document.body.appendChild(a); a.click(); a.remove();
-  el.flash.style.transition = 'none'; el.flash.style.opacity = 0.55;
-  requestAnimationFrame(() => { el.flash.style.transition = 'opacity .45s'; el.flash.style.opacity = 0; });
-  toast('Снимок сохранён: ' + a.download, 2600);
+  if (!reducedMotion()) {                   // M-05d: без вспышки при prefers-reduced-motion
+    el.flash.style.transition = 'none'; el.flash.style.opacity = 0.55;
+    requestAnimationFrame(() => { el.flash.style.transition = 'opacity .45s'; el.flash.style.opacity = 0; });
+  }
+  toast(shotSaved(a.download), 2600);
 }
 
-export { setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot };
+export { touch, setRange, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot };

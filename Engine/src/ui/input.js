@@ -9,6 +9,12 @@
  * выбор; пока открыта справка, другие клавиши не действуют, кроме ? и Shift+/ (закрыть). Строки «Фаз» вместо диаграммы
  * на canvas — ui/phases.js: нажатие на строку выбирает цилиндр для p–V. Центр кадра камеры следует за свободной
  * областью между панелями (ui/layout.js → ui/camera.js, П-4), в том числе при изменении размера окна.
+ * M-05d (§7 в 14_M05): фокус снимается только после мыши и касания (ui/focus.js). Space и Enter на кнопке, ползунке,
+ * радиокнопке или пункте меню действуют на этот элемент и не запускают двигатель; в остальных случаях Space — запуск
+ * и пауза, как раньше. Сцена с клавиатуры: когда холст получил фокус клавиатурой (Tab; класс kbd, рамка по свободной
+ * области), стрелки вращают камеру, Shift+стрелки сдвигают, PgUp и PgDn приближают и отдаляют (ui/camera.js); без
+ * такого фокуса ← и → переключают шаги, как раньше. Сегмент «Вид» — радиогруппа: стрелки выбирают соседний вид.
+ * Закрытая с клавиатуры карточка возвращает фокус на фишку детали (или на сцену), снятая изоляция — на сцену.
  */
 import { DEG } from '../config/engine-spec.js';
 import { audio } from '../audio/engine-audio.js';
@@ -20,16 +26,18 @@ import { inPts, exPts } from '../render/effects/strokes.js';
 import { ui, el } from './state.js';
 import { meanProgress, boundsWith } from './explode.js';
 import { exitStepMode, animateExplode, nextStep, prevStep, updateStepUI } from './steps.js';
-import { frameBox, cameraPreset, resetView, applyViewShift, focusOn } from './camera.js';
+import { frameBox, cameraPreset, resetView, applyViewShift, focusOn, orbitBy, panBy, zoomBy } from './camera.js';
 import { setView, cycleView, setCut } from './view.js';
 import { pick, select, isolate, setHover } from './selection.js';
 import { updateLive } from './info.js';
 import { setupCharts } from './charts/canvas.js';
 import { initPhases } from './phases.js';
 import { buildLabels } from './labels.js';
-import { updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot } from './controls.js';
-import { fitLayout, onFreeArea, togglePanels, toggleDrawer, initSections } from './layout.js';
-import { menuOpen, setMenu, toggleMenu, openHelp, closeHelp, toggleHelp, dropFocus } from './menus.js';
+import { touch, updateSpeedUI, setRunning, toggleRun, nudgeCrank, toast, setToggle, screenshot } from './controls.js';
+import { fitLayout, onFreeArea, togglePanels, toggleDrawer, initSections, panelShown } from './layout.js';
+import { menuOpen, setMenu, toggleMenu, initMenu, openHelp, closeHelp, toggleHelp, onHelpClosed } from './menus.js';
+import { trackInput, viaKeyboard, blurAfterPointer, moveFocusOut } from './focus.js';
+import { S, toastText } from './strings.ru.js';
 
 let life;
 const setInputLifecycle = ctl => { life = ctl; };
@@ -44,25 +52,28 @@ function initUI() {
   el.canvas = renderer.domElement;
   el.fireChips = Array.from(document.querySelectorAll('.fire .c'));
 
-  // buttons never keep focus (so Space never double-triggers a focused button)
-  document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); }, { signal: life.signal });
+  // M-05d: после мыши и касания кнопки не держат фокус (Space не нажимает их повторно); фокус с клавиатуры остаётся
+  trackInput(life);
+  document.addEventListener('click', e => { const b = e.target.closest('button'); if (b && e.detail > 0) b.blur(); }, { signal: life.signal });
 
   el.explodeSlider.addEventListener('input', () => {
     exitStepMode();
     if (ui.explodeTw) { ui.explodeTw.kill(); ui.explodeTw = null; }
     ui.explode = el.explodeSlider.value / 100;
   });
-  el.explodeSlider.addEventListener('change', () => el.explodeSlider.blur());
+  el.explodeSlider.addEventListener('change', () => blurAfterPointer(el.explodeSlider));
   el.btnAssemble.addEventListener('click', () => { animateExplode(0); frameBox(boundsWith(0), 1.2, 0.15); });
   el.btnExplode.addEventListener('click', () => { animateExplode(1); frameBox(boundsWith(1), 1.35, 0.25); });
   el.btnPrev.addEventListener('click', prevStep);
   el.btnNext.addEventListener('click', nextStep);
 
   document.querySelectorAll('#viewSeg button').forEach(b => b.addEventListener('click', () => setView(b.dataset.mode)));
+  $('viewSeg').addEventListener('keydown', viewKey);
   el.cutSlider.addEventListener('input', () => setCut(+el.cutSlider.value));
-  el.cutSlider.addEventListener('change', () => el.cutSlider.blur());
+  el.cutSlider.addEventListener('change', () => blurAfterPointer(el.cutSlider));
   setCut(+el.cutSlider.value);
   el.btnCam.addEventListener('click', toggleMenu);
+  initMenu(life.signal);
   el.camMenu.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', () => { setMenu(false); cameraPreset(b.dataset.cam); }));
   el.btnReset.addEventListener('click', () => { setMenu(false); resetView(); });
   document.addEventListener('pointerdown', e => { if (menuOpen() && !e.target.closest('.menu-wrap')) setMenu(false); }, { signal: life.signal });
@@ -84,7 +95,7 @@ function initUI() {
     el.partChips.appendChild(c);
     (el.chips = el.chips || {})[n.userData.key] = c;
   });
-  el.partCount.textContent = nodesList.length + ' узлов';
+  el.partCount.textContent = S.nodeCount(nodesList.length);
 
   // panels, help
   el.drawerLeft.addEventListener('click', () => toggleDrawer('hud'));
@@ -97,16 +108,16 @@ function initUI() {
   el.helpLink2.addEventListener('click', openHelp);
   el.helpClose.addEventListener('click', closeHelp);
   el.help.addEventListener('click', e => { if (e.target === el.help && outside(el.help, e)) closeHelp(); });   // щелчок по фону
-  el.help.addEventListener('close', dropFocus);
+  el.help.addEventListener('close', onHelpClosed);
 
   // engine controls
   el.btnRun.addEventListener('click', toggleRun);
   el.btnSlow.addEventListener('click', () => { sim.slow = !sim.slow; setToggle(el.btnSlow, sim.slow); updateSpeedUI(); });
   el.speedSlider.addEventListener('input', updateSpeedUI);
-  el.speedSlider.addEventListener('change', () => el.speedSlider.blur());
+  el.speedSlider.addEventListener('change', () => blurAfterPointer(el.speedSlider));
   updateSpeedUI();
   const startScrub = () => { if (ui.scrubbing) return; ui.scrubbing = true; ui.wasRunning = sim.running; if (sim.running) setRunning(false); };
-  const endScrub = () => { if (!ui.scrubbing) return; ui.scrubbing = false; if (ui.wasRunning) setRunning(true); el.angleSlider.blur(); };
+  const endScrub = () => { if (!ui.scrubbing) return; ui.scrubbing = false; if (ui.wasRunning) setRunning(true); blurAfterPointer(el.angleSlider); };
   el.angleSlider.addEventListener('pointerdown', startScrub);
   el.angleSlider.addEventListener('input', () => {
     if (!ui.scrubbing) { startScrub(); ui.scrubbing = 'key'; }
@@ -125,6 +136,7 @@ function initUI() {
       t1 = setTimeout(() => { t2 = setInterval(() => nudgeCrank(step), 45); }, 320);
     });
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+    btn.addEventListener('click', e => { if (e.detail === 0) nudgeCrank((e.shiftKey ? 1 : 5) * sign); });   // M-05d: Enter и Space
   };
   holdRepeat(el.btnDegBack, -1);
   holdRepeat(el.btnDegFwd, 1);
@@ -133,10 +145,10 @@ function initUI() {
   el.fireChips.forEach(c => c.addEventListener('click', () => setPvCyl(+c.dataset.c)));
 
   // info card
-  el.infoClose.addEventListener('click', () => select(null, false));
+  el.infoClose.addEventListener('click', closeCard);
   el.btnFocus.addEventListener('click', () => ui.selected && focusOn(ui.selected));
   el.btnIsolate.addEventListener('click', () => isolate(ui.isolated === ui.selected ? null : ui.selected));
-  el.btnUnIso.addEventListener('click', () => isolate(null));
+  el.btnUnIso.addEventListener('click', unIsolate);
 
   // pointer: hover, click vs drag, double-click isolate
   const cv = el.canvas;
@@ -153,11 +165,14 @@ function initUI() {
     if (ui.dragging) setHover(null);
   });
   cv.addEventListener('pointerleave', () => { ui.needHover = false; setHover(null); });
+  cv.addEventListener('focus', () => setSceneKeys(viaKeyboard()));
+  cv.addEventListener('blur', () => setSceneKeys(false));
   cv.addEventListener('pointerdown', e => {
     ui.down = { x: e.clientX, y: e.clientY, t: performance.now(), button: e.button };
     ui.dragging = false;
     ui.lastInteract = performance.now();
     cv.focus({ preventScroll: true });
+    setSceneKeys(false);                    // после focus(): trackInput узнает об указателе позже, на document
   });
   cv.addEventListener('pointerup', e => {
     const d = ui.down; ui.down = null;
@@ -183,37 +198,75 @@ function initUI() {
   setupCharts();
   setPvCyl(ui.pvCyl);
 }
+// сцена получила фокус с клавиатуры: стрелки и PgUp/PgDn управляют камерой
+let sceneKeys = false;
+function setSceneKeys(on) { sceneKeys = on; el.canvas.classList.toggle('kbd', on); }
+function sceneKey(e) {
+  const k = e.key;
+  if (k === 'PageUp' || k === 'PageDown') zoomBy(k === 'PageUp' ? 1 : -1);
+  else {
+    const dx = k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0, dy = k === 'ArrowUp' ? 1 : k === 'ArrowDown' ? -1 : 0;
+    if (e.shiftKey) panBy(dx, dy); else orbitBy(dx, dy);
+  }
+  e.preventDefault();
+}
+// радиогруппа «Вид»: стрелки и Home/End выбирают вид и переносят на него фокус
+function viewKey(e) {
+  const list = Array.from(document.querySelectorAll('#viewSeg button')), i = list.findIndex(b => b.dataset.mode === ui.view), k = e.key;
+  const to = k === 'ArrowRight' || k === 'ArrowDown' ? (i + 1) % 3 : k === 'ArrowLeft' || k === 'ArrowUp' ? (i + 2) % 3
+    : k === 'Home' ? 0 : k === 'End' ? 2 : -1;
+  if (to < 0 || e.ctrlKey || e.metaKey || e.altKey) return;
+  setView(list[to].dataset.mode);
+  list[to].focus();
+  e.preventDefault();
+}
+function closeCard() {
+  const n = ui.selected;
+  moveFocusOut(el.infocard, n && panelShown('hud') ? el.chips[n.userData.key] : el.canvas);
+  select(null, false);
+}
+function unIsolate() {
+  moveFocusOut(el.isoBar, el.canvas);
+  isolate(null);
+}
+// Space и Enter на элементе управления действуют на него (нативное нажатие), а не на двигатель
+const CONTROL = 'button, input, a[href], [role=radio], [role=tab], [role^=menuitem]';
+const onControl = t => !!(t && t !== el.canvas && t.matches && t.matches(CONTROL));
 function outside(box, e) {
   const r = box.getBoundingClientRect();
   return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
 }
 function setPvCyl(i) {
   ui.pvCyl = i;
-  el.pvTitle.textContent = 'p–V · цилиндр ' + (i + 1);
+  el.pvTitle.textContent = S.pvTitle(i + 1);
+  el.pv.setAttribute('aria-label', S.pvLabel(i + 1));
   el.fireChips.forEach(c => c.setAttribute('aria-pressed', +c.dataset.c === i));
   el.phaseRows.forEach(r => r.setAttribute('aria-pressed', +r.dataset.c === i));
   updateLive(true);
 }
 function toggleSound() {
   const want = !audio.on;
-  if (!audio.setOn(want)) { toast('Браузер не поддерживает WebAudio'); return; }
+  if (!audio.setOn(want)) { toast(toastText('noAudio')); return; }
   setToggle(el.btnSound, want);
-  if (want) toast(sim.running ? 'Звук включён: каждый «хлопок» — рабочий ход' : 'Звук включён — запустите двигатель (Space)');
+  if (want) toast(sim.running ? toastText('soundRun') : toastText('soundIdle', touch()));
 }
 function onKey(e) {
-  const tag = e.target && e.target.tagName;
-  if (tag === 'INPUT' && /^Arrow/.test(e.key)) return;     // let a focused slider use the arrows
+  if (e.defaultPrevented) return;                          // M-05d: клавишу уже обработали меню или радиогруппа
+  const t = e.target, tag = t && t.tagName;
+  if (tag === 'INPUT' && /^(Arrow|Page|Home|End)/.test(e.key)) return;   // let a focused slider use its keys
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key;
   ui.lastInteract = performance.now();
   if (k === 'Escape') {
     if (menuOpen()) setMenu(false);
     else if (el.help.open) closeHelp();
-    else if (ui.isolated) isolate(null);
-    else if (ui.selected) select(null, false);
+    else if (ui.isolated) unIsolate();
+    else if (ui.selected) closeCard();
     return;
   }
   if (el.help.open) { if (k === '?' || (e.code === 'Slash' && e.shiftKey)) closeHelp(); return; }
+  if ((k === ' ' || k === 'Enter') && onControl(t)) return;   // M-05d: нажатие получает сам элемент
+  if (t === el.canvas && sceneKeys && /^(Arrow|Page(Up|Down)$)/.test(k)) { sceneKey(e); return; }
   if (k === ' ') { toggleRun(); e.preventDefault(); }
   else if (k === 'ArrowRight') { nextStep(); e.preventDefault(); }
   else if (k === 'ArrowLeft') { prevStep(); e.preventDefault(); }

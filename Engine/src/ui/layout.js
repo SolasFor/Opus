@@ -10,10 +10,15 @@
  * Свободная область кадра (П-4) — freeArea(): между верхней панелью, видимыми боковыми панелями и лентой; после
  * каждого изменения раскладки вызывается обработчик onFreeArea(fn) — fn(animate): плавно при показе и скрытии панелей,
  * сразу при изменении размера окна.
+ * M-05d: подписи кнопки «Скрыть панели» — из ui/strings.ru.js. Если панель скрывается, когда в ней фокус с клавиатуры,
+ * фокус переходит на кнопку, которой панель вернуть (ui/focus.js). Свободная область передаётся в CSS как --free-l,
+ * --free-t, --free-r, --free-b: по ней рисуется рамка фокуса сцены.
  */
 import { el } from './state.js';
 import { setupCharts } from './charts/canvas.js';
 import { freeRect } from './free-area.js';
+import { S } from './strings.ru.js';
+import { moveFocusOut } from './focus.js';
 
 const BREAK = { desktop: 1100, tablet: 760 };
 const SIDES_AT_START = { desktop: ['hud', 'cycle'], tablet: ['hud'], phone: [] };
@@ -33,12 +38,13 @@ const onFreeArea = fn => { lay.onFree = fn; };
 function applyLayout(animate = true) {
   for (const id of ['hud', 'cycle', 'timeline']) {
     const on = panelShown(id);
+    if (!on) moveFocusOut(el[id], lay.clean || lay.mode === 'desktop' ? el.btnPanels : id === 'hud' ? el.drawerLeft : el.drawerRight);
     el[id].classList.toggle('hid', !on);
     el[id].inert = !on;
   }
   el.drawerLeft.setAttribute('aria-pressed', panelShown('hud'));
   el.drawerRight.setAttribute('aria-pressed', panelShown('cycle'));
-  const label = lay.clean ? 'Показать панели' : 'Скрыть панели';
+  const label = lay.clean ? S.showPanels : S.hidePanels;
   el.btnPanels.setAttribute('aria-pressed', lay.clean);
   el.btnPanels.setAttribute('aria-label', label);
   el.btnPanels.title = label + ' · H';
@@ -47,6 +53,7 @@ function applyLayout(animate = true) {
   root.dataset.layout = lay.mode;
   root.style.setProperty('--tl-h', el.timeline.offsetHeight + 'px');
   measureFree();
+  for (const k of ['l', 't', 'r', 'b']) root.style.setProperty('--free-' + k, lay.free[k] + 'px');
   if (lay.onFree) lay.onFree(animate);
 }
 function fitLayout() {
