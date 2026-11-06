@@ -9,7 +9,7 @@
   #grain{position:fixed;inset:-60px;pointer-events:none;z-index:1;opacity:.07;animation:grain 1s steps(6) infinite;}
   @keyframes grain{0%{transform:translate(0,0)}17%{transform:translate(-23px,11px)}33%{transform:translate(17px,-29px)}50%{transform:translate(-9px,31px)}67%{transform:translate(29px,7px)}83%{transform:translate(-31px,-17px)}100%{transform:translate(0,0)}}
   #hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2;font-size:12.5px;line-height:1.5;letter-spacing:.03em;
-    color:rgba(205,238,255,.62);text-shadow:0 1px 6px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;transition:opacity 2s ease;opacity:0;}
+    color:rgba(205,238,255,.85);text-shadow:0 1px 6px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;transition:opacity 2s ease;opacity:0;}
   #hint.on{opacity:1}
   #fps{position:fixed;left:12px;bottom:10px;z-index:2;font:11px/1 ui-monospace,Menlo,Consolas,monospace;color:rgba(190,235,255,.4);pointer-events:none;}
   #tip{position:fixed;z-index:4;pointer-events:none;padding:5px 9px 6px;border-radius:8px;background:rgba(4,20,30,.62);
@@ -27,25 +27,25 @@
     transition:opacity .4s, transform .4s;max-height:calc(100vh - 28px);overflow:auto;scrollbar-width:thin;}
   #panel.hid{opacity:0;transform:translateX(30px);pointer-events:none;}
   #panel h3{margin:0 0 9px;font:600 13px/1 inherit;letter-spacing:.12em;text-transform:uppercase;color:#bfeaff;display:flex;justify-content:space-between;align-items:center}
-  #panel h3 span{font:400 10.5px/1 inherit;letter-spacing:.02em;text-transform:none;color:rgba(190,230,250,.55)}
-  #panel .sec{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(170,220,240,.5);margin:11px 0 5px}
+  #panel h3 span{font:400 10.5px/1 inherit;letter-spacing:.02em;text-transform:none;color:rgba(190,230,250,.8)}
+  #panel .sec{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(170,220,240,.95);margin:11px 0 5px}
   .seg{display:flex;gap:5px}
   .seg button,.btns button{flex:1;padding:6px 0;background:rgba(95,211,255,.1);color:inherit;border:1px solid rgba(140,220,255,.25);border-radius:8px;
     cursor:pointer;font:inherit;transition:background .2s,border-color .2s}
   .seg button:hover,.btns button:hover{background:rgba(95,211,255,.25)}
   .seg button.act{background:rgba(95,211,255,.34);border-color:rgba(170,235,255,.6);box-shadow:0 0 12px rgba(95,211,255,.25)}
-  .seg button b{font-weight:400;opacity:.45;font-size:10px;margin-left:3px}
-  .row{display:grid;grid-template-columns:78px 1fr 30px;align-items:center;gap:6px;margin:5px 0}
-  .row output{text-align:right;font-variant-numeric:tabular-nums;color:rgba(200,235,250,.6);font-size:11px}
+  .seg button b{font-weight:400;opacity:.85;font-size:10px;margin-left:3px}
+  .row{display:grid;grid-template-columns:78px 1fr 40px;align-items:center;gap:6px;margin:5px 0}
+  .row output{text-align:right;font-variant-numeric:tabular-nums;color:rgba(200,235,250,.8);font-size:11px;white-space:nowrap}
   input[type=range]{width:100%;margin:0;accent-color:#5fd3ff;height:16px}
   .tog{display:flex;justify-content:space-between;align-items:center;margin:4px 0;cursor:pointer}
   .tog input{appearance:none;-webkit-appearance:none;width:30px;height:16px;border-radius:9px;background:rgba(255,255,255,.14);position:relative;cursor:pointer;margin:0;transition:background .2s;flex:none}
   .tog input::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#cfefff;transition:transform .2s}
   .tog input:checked{background:#2fa8d8}
   .tog input:checked::after{transform:translateX(14px)}
-  .tog small{opacity:.45;font-size:10px;margin-left:4px}
+  .tog small{opacity:.85;font-size:10px;margin-left:4px}
   .btns{display:flex;gap:5px;margin-top:6px}
-  #keys{margin-top:9px;font-size:10.5px;line-height:1.55;color:rgba(180,225,245,.5)}
+  #keys{margin-top:9px;font-size:10.5px;line-height:1.55;color:rgba(180,225,245,.8)}
   #keys kbd{font:10px ui-monospace,monospace;padding:0 4px;border:1px solid rgba(160,220,255,.25);border-radius:3px;color:rgba(210,240,255,.75)}
   #open{position:fixed;top:14px;right:14px;z-index:3;width:34px;height:34px;border-radius:10px;border:1px solid rgba(150,225,255,.22);
     background:rgba(4,20,30,.5);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#cfefff;font-size:16px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .4s}
@@ -70,3 +70,46 @@
     background:rgba(95,211,255,.16);border:1px solid rgba(150,225,255,.4);transition:background .2s}
   #bootact button:hover{background:rgba(95,211,255,.3)}
   #bootact button:focus-visible{outline:2px solid #9fe6ff;outline-offset:3px}
+  /* A-02: телефон, касание, доступность. Подсказки для мыши и для пальца — .k-mouse и .k-touch */
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  .k-touch{display:none}
+  @media (hover: none) and (pointer: coarse){.k-mouse{display:none}.k-touch{display:inline}}
+  canvas{-webkit-touch-callout:none}
+  canvas:focus-visible{outline:2px solid #9fe6ff;outline-offset:-3px}
+  #panel button:focus-visible,#panel input:focus-visible,#open:focus-visible,#follow button:focus-visible,#bootact a:focus-visible{outline:2px solid #9fe6ff;outline-offset:2px}
+  #panel button,#panel label,#panel input,#open,#follow button{touch-action:manipulation}
+  #open svg{display:block;margin:auto}
+  #grip{display:none}
+  #panel .note{margin:-1px 0 6px;font-size:10.5px;line-height:1.4;color:rgba(190,230,250,.8)}
+  #follow button{margin-left:10px;padding:2px 10px 3px;font:inherit;font-size:12px;color:#dff5ff;background:rgba(95,211,255,.16);
+    border:1px solid rgba(150,225,255,.4);border-radius:12px;cursor:pointer}
+  #follow.on button{pointer-events:auto}
+  #bootact a{font-size:14px;letter-spacing:.04em;padding:9px 20px;border-radius:10px;color:#e2f6ff;text-decoration:none;
+    background:rgba(95,211,255,.16);border:1px solid rgba(150,225,255,.4)}
+  @media (max-width: 759px){
+    #hint{white-space:normal;width:calc(100vw - 32px);text-align:center;bottom:calc(var(--sheet-h, 0px) + 12px)}
+    #follow{white-space:normal;width:max-content;max-width:calc(100vw - 24px);box-sizing:border-box;text-align:center}
+  }
+  /* шторка на телефоне (ui/sheet.js): класс sheet у <html> ставит initSheet() по (max-width: 759px); высоту задаёт style.height */
+  html.sheet #panel{top:auto;right:0;bottom:0;left:0;width:auto;max-height:none;box-sizing:border-box;padding:0 14px env(safe-area-inset-bottom);
+    border-radius:16px 16px 0 0;border-bottom:0;display:flex;flex-direction:column;overflow:hidden;transition:height .3s cubic-bezier(.2,.8,.2,1);
+    backdrop-filter:blur(8px) saturate(1.2);-webkit-backdrop-filter:blur(8px) saturate(1.2)}
+  html.sheet #panel.hid{opacity:1;transform:none;pointer-events:auto}
+  html.sheet #panel.drag{transition:none}
+  html.sheet #grip{display:flex;flex:none;align-items:center;justify-content:center;height:40px;margin:0 -14px;padding:0;background:none;border:0;
+    border-radius:16px 16px 0 0;cursor:grab;touch-action:none;color:inherit}
+  html.sheet #grip .bar{width:40px;height:5px;border-radius:3px;background:rgba(190,235,255,.6)}
+  html.sheet #grip:focus-visible{outline-offset:-4px}
+  html.sheet #panel h3{display:none}
+  html.sheet #panel .btns{flex:none;margin:0 0 10px}
+  html.sheet #panel .btns button,html.sheet .seg button{min-height:44px}
+  html.sheet #pbody{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding-bottom:12px}
+  html.sheet #pbody .sec:first-child{margin-top:2px}
+  html.sheet .row{min-height:44px;grid-template-columns:84px 1fr 48px;margin:0}
+  html.sheet .tog{min-height:44px;margin:0}
+  html.sheet #open{display:none}
+  @media (prefers-reduced-motion: reduce){
+    #grain{display:none}
+    #boot .b{animation:none}
+    #panel,#hint,#follow,#tip,#open,#boot,html.sheet #panel{transition:none}
+  }

@@ -12,11 +12,15 @@
  *      main.js никто не импортирует). Импортированное имя экспортируется источником и используется импортирующим;
  *      каждое экспортированное имя объявлено в модуле и кто-то его импортирует.
  * С этапа A-02 модули меняются намеренно. Изменённый модуль вносится в CHANGED (модуль → этап): для него правило 1
- * проверяет только, что тело действительно отличается от опоры (так же Engine M-02, split-sync.test.js).
+ * проверяет только, что тело действительно отличается от опоры (так же Engine M-02, split-sync.test.js), а телом
+ * считается всё между импортами и строками связки и export. Новые модули (нет в Aquarium.html) — в NEW (модуль → этап):
+ * для них правила 2 и 3, импорт three не обязателен, а экспортированное имя может импортировать и тест (tests/*.test.js).
  * Без сторонних зависимостей.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { posix } from 'node:path';
 import { LEGACY, MODULES, ORDER } from './_app.js';
 
 const SPLIT = { core: [156, 324], scenery: [325, 914], creatures: [915, 1186], main: [1187, 1962] };   // строки Aquarium.html
@@ -32,7 +36,12 @@ const WIRING = {
   creatures: ['', '// связка A-01b: после восстановления WebGL-контекста main.js строит окружение рыб заново',
     'const storeEnv = env => { ENV = env; };'],
 };
-const CHANGED = {};   // модуль → этап, например { main: 'A-02' }
+const CHANGED = { main: 'A-02' };   // модуль → этап
+const NEW = { adapt: 'A-02', 'ui/strings.ru': 'A-02', 'ui/gestures': 'A-02', 'ui/sheet': 'A-02' };   // модули, которых нет в Aquarium.html
+const LEGACY_ORDER = ORDER.filter(n => !NEW[n]);
+// имена, которые тесты импортируют из модулей: import { … } from '../src/<модуль>.js'
+const TESTS = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.test.js')).map(f => readFileSync(new URL(f, import.meta.url), 'utf8'));
+const testImports = n => TESTS.flatMap(t => [...t.matchAll(/^import \{([\w$,\s]+)\} from '\.\.\/src\/([\w./-]+)\.js';$/gm)].filter(m => m[2] === n).flatMap(m => m[1].split(/[\s,]+/).filter(Boolean)));
 
 const LEG = LEGACY.split('\n');
 const MOD0 = LEG.indexOf('<script type="module" onerror="window.__aqModuleError()">') + 1;   // номер строки тега
@@ -42,7 +51,7 @@ const code = s => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/g
   .replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, '""')
   .replace(/`(?:\\[\s\S]|[^`\\])*`/g, t => ' ' + [...t.matchAll(/\$\{([^{}]*)\}/g)].map(m => m[1]).join(' ') + ' ');
 const esc = n => n.replace(/\$/g, '\\$');
-const uses = (text, n) => (text.match(new RegExp(`(?<![\\w$.])${esc(n)}(?![\\w$])`, 'g')) || []).length;
+const uses = (text, n) => (text.match(new RegExp(`(?<![\\w$])(?<![^.]\\.)${esc(n)}(?![\\w$])`, 'g')) || []).length;   // ...x — использование
 const declares = (text, n) => new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|function|class)\\s+(?:[\\w$]+\\s*=[^\\n;]*?,\\s*)*${esc(n)}\\b`).test(text);
 
 function parse(name) {
@@ -54,7 +63,11 @@ function parse(name) {
   i++;
   const imports = [];
   while (lines[i].startsWith('import ')) imports.push(lines[i++]);
-  assert.equal(lines[i++], '', `${name}.js: пустая строка после импортов`);
+  if (imports.length || !NEW[name]) assert.equal(lines[i++], '', `${name}.js: пустая строка после импортов`);
+  if (CHANGED[name] || NEW[name]) {   // тело — до строк связки и export
+    const w = (WIRING[name] || []).length, e = /^export \{/.test(lines.at(-1)) ? 1 : 0;
+    return { lines, imports, body: lines.slice(i, lines.length - w - e), tail: lines.slice(lines.length - w - e) };
+  }
   const [a, b] = SPLIT[name], n = b - a + 1;
   const body = lines.slice(i, i + n), tail = lines.slice(i + n);
   return { lines, imports, body, tail };
@@ -62,7 +75,9 @@ function parse(name) {
 const P = Object.fromEntries(ORDER.map(n => [n, parse(n)]));
 
 test('порядок модулей и точка входа', () => {
-  assert.deepEqual(Object.keys(SPLIT), ORDER);
+  assert.deepEqual(Object.keys(SPLIT), LEGACY_ORDER);
+  for (const n of Object.keys(NEW)) assert.ok(ORDER.includes(n), `новый модуль ${n} есть в ORDER (tests/_app.js)`);
+  for (const n of Object.keys(CHANGED)) assert.ok(SPLIT[n], `изменённый модуль ${n} есть в SPLIT`);
   assert.equal(MOD0, 151);
   assert.deepEqual(legacyLines(MOD0 + 1, MOD0 + 4), ["import * as THREE from 'three';",
     "import { OrbitControls } from 'three/addons/controls/OrbitControls.js';",
@@ -72,13 +87,13 @@ test('порядок модулей и точка входа', () => {
 
 test('тела модулей покрывают модуль Aquarium.html подряд, без пропусков и повторов', () => {
   let next = MOD0 + 5;
-  for (const n of ORDER) { assert.equal(SPLIT[n][0], next, `${n}: начало`); next = SPLIT[n][1] + 1; }
+  for (const n of LEGACY_ORDER) { assert.equal(SPLIT[n][0], next, `${n}: начало`); next = SPLIT[n][1] + 1; }
   assert.equal(next, 1963, 'последняя строка модуля — 1962');
-  for (const k of Object.keys(SEAMS).map(Number)) assert.ok(ORDER.some(n => k >= SPLIT[n][0] && k <= SPLIT[n][1]));
+  for (const k of Object.keys(SEAMS).map(Number)) assert.ok(LEGACY_ORDER.some(n => k >= SPLIT[n][0] && k <= SPLIT[n][1]));
 });
 
 test('тело модуля — строки Aquarium.html без правок, кроме швов SEAMS', () => {
-  for (const n of ORDER) {
+  for (const n of LEGACY_ORDER) {
     const [a, b] = SPLIT[n];
     const ref = legacyLines(a, b).map((s, j) => {
       const seam = SEAMS[a + j]; if (!seam) return s;
@@ -102,6 +117,7 @@ test('после тела — только связка WIRING и одна ст�
 
 test('импорты: three, аддоны и более ранние модули; имена экспортируются, используются и объявлены', () => {
   const exp = {}, imported = {};
+  for (const n of ORDER) for (const x of testImports(n)) (imported[n] ||= new Set()).add(x);
   for (const n of ORDER) {
     const e = (P[n].tail.at(-1) || '').match(/^export \{ ([\w$, ]+) \};$/);
     exp[n] = e ? e[1].split(', ') : [];
@@ -110,15 +126,17 @@ test('импорты: three, аддоны и более ранние модул�
   }
   for (const n of ORDER) {
     const rest = code(P[n].body.concat(WIRING[n] || []).join('\n'));
-    assert.equal(P[n].imports[0], "import * as THREE from 'three';", `${n}.js: первым — three`);
-    for (const line of P[n].imports.slice(1)) {
+    const three = P[n].imports[0] === "import * as THREE from 'three';";
+    assert.ok(three || NEW[n], `${n}.js: первым — three`);
+    for (const line of P[n].imports.slice(three ? 1 : 0)) {
       const m = line.match(/^import \{ ([\w$, ]+) \} from '([^']+)';$/);
       assert.ok(m, `${n}.js: импорт вида import { … } from '…': ${line}`);
       const names = m[1].split(', '), src = m[2];
       let from = null;
       if (src.startsWith('three/addons/')) assert.match(src, /^three\/addons\/[\w/]+\.js$/);
       else {
-        from = (src.match(/^\.\/(\w+)\.js$/) || [])[1];
+        assert.match(src, /^\.\.?\/[\w./-]+\.js$/, `${n}.js: путь модуля ${src}`);
+        from = posix.join(posix.dirname(n), src).replace(/\.js$/, '');
         assert.ok(ORDER.includes(from), `${n}.js: неизвестный модуль ${src}`);
         assert.ok(ORDER.indexOf(from) < ORDER.indexOf(n), `${n}.js импортирует ${from}.js, который выполняется позже (цикл)`);
       }
@@ -132,9 +150,9 @@ test('импорты: three, аддоны и более ранние модул�
   assert.ok(!imported.main, 'main.js никто не импортирует');
 });
 
-test('main.js импортирует модули в порядке выполнения: core → scenery → creatures', () => {
-  const order = P.main.imports.map(l => (l.match(/from '\.\/(\w+)\.js'/) || [])[1]).filter(Boolean);
-  assert.deepEqual(order, ['core', 'scenery', 'creatures']);
+test('main.js импортирует модули в порядке выполнения: core → scenery → creatures → adapt → ui/…', () => {
+  const order = P.main.imports.map(l => (l.match(/from '\.\/([\w./-]+)\.js'/) || [])[1]).filter(Boolean);
+  assert.deepEqual(order, ORDER.filter(n => n !== 'main'));
   assert.deepEqual(P.creatures.imports.map(l => (l.match(/from '\.\/(\w+)\.js'/) || [])[1]).filter(Boolean), ['core', 'scenery']);
   assert.deepEqual(P.scenery.imports.map(l => (l.match(/from '\.\/(\w+)\.js'/) || [])[1]).filter(Boolean), ['core']);
 });
