@@ -7,6 +7,8 @@
  *      новый хэш фиксируется вместе с этим решением.
  *   2) Модульная версия загружает three.js так же, как однофайловая: тот же importmap (three 0.160.0 с unpkg),
  *      один модуль-точка входа с onerror (сообщение о CDN и «Повторить»), стили — одним файлом.
+ *   3) styles/app.css — стили Aquarium.html с правками STYLE_EDITS (строка: было → стало) и новыми правилами в конце,
+ *      каждый блок новых правил начинается с комментария этапа. A-02: контраст мелкого текста и ширина столбца чисел.
  * Без сторонних зависимостей.
  */
 import test from 'node:test';
@@ -15,6 +17,12 @@ import { createHash } from 'node:crypto';
 import { INDEX, LEGACY, MAIN, ENTRY, LINK, CSS } from './_app.js';
 
 const AQUARIUM_HTML_SHA256 = '70daa73c923d98ecdd4b56be2b6414f572e0fbab7cdac24f9b877ee486d445e8';   // blob 31ec654, main@0852980 (A-01, PR #19)
+const STYLE_EDITS = {   // A-02: контраст мелкого текста не ниже 4,5 : 1 и место для «100 %» в ru-RU
+  12: ['color:rgba(205,238,255,.62)', 'color:rgba(205,238,255,.85)'], 30: ['color:rgba(190,230,250,.55)', 'color:rgba(190,230,250,.8)'],
+  31: ['color:rgba(170,220,240,.5)', 'color:rgba(170,220,240,.95)'], 37: ['opacity:.45', 'opacity:.85'], 38: ['1fr 30px', '1fr 40px'],
+  39: ['color:rgba(200,235,250,.6);font-size:11px', 'color:rgba(200,235,250,.8);font-size:11px;white-space:nowrap'],
+  46: ['opacity:.45', 'opacity:.85'], 48: ['color:rgba(180,225,245,.5)', 'color:rgba(180,225,245,.8)'],
+};
 const importmap = h => JSON.parse(h.match(/<script type="importmap">\n([\s\S]*?)<\/script>/)[1]);
 
 test('Aquarium.html заморожена: sha256 совпадает с зафиксированным', () => {
@@ -35,5 +43,17 @@ test('модульная версия: тот же importmap, одна точк�
   assert.ok(!/<style[\s>]/.test(INDEX), 'в index.html нет встроенных стилей');
   assert.ok(/^import \* as THREE from 'three';$/m.test(MAIN), 'main.js импортирует three через importmap');
   assert.ok(!/from '\.\.?\/[^']*\.css'/.test(MAIN));
-  assert.ok(LEGACY.includes('<style>\n' + CSS + '</style>\n'), 'styles/app.css — стили Aquarium.html дословно');
+});
+
+test('styles/app.css — стили Aquarium.html с правками STYLE_EDITS, новые правила — в конце', () => {
+  const legacy = LEGACY.match(/<style>\n([\s\S]*?)<\/style>\n/)[1].split('\n');
+  assert.equal(legacy.pop(), '');
+  const ref = legacy.map((s, j) => {
+    const e = STYLE_EDITS[j + 1]; if (!e) return s;
+    assert.equal(s.split(e[0]).length, 2, `стили Aquarium.html, строка ${j + 1}: «${e[0]}» ровно один раз`);
+    return s.replace(e[0], () => e[1]);
+  });
+  const css = CSS.split('\n');
+  assert.deepEqual(css.slice(0, ref.length), ref, 'начало styles/app.css — стили Aquarium.html с правками STYLE_EDITS');
+  assert.match(css[ref.length], /^  \/\* A-\d\d[a-z]?: /, 'новые правила начинаются с комментария этапа');
 });
