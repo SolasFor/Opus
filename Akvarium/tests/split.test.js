@@ -36,7 +36,7 @@ const WIRING = {
   creatures: ['', '// связка A-01b: после восстановления WebGL-контекста main.js строит окружение рыб заново',
     'const storeEnv = env => { ENV = env; };'],
 };
-const CHANGED = { main: 'A-02' };   // модуль → этап
+const CHANGED = { main: 'A-02', core: 'A-03' };   // модуль → этап
 const NEW = { adapt: 'A-02', 'ui/strings.ru': 'A-02', 'ui/gestures': 'A-02', 'ui/sheet': 'A-02' };   // модули, которых нет в Aquarium.html
 const LEGACY_ORDER = ORDER.filter(n => !NEW[n]);
 // имена, которые тесты импортируют из модулей: import { … } from '../src/<модуль>.js'

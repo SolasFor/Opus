@@ -3,6 +3,7 @@
  * (общее зерно seed), общий GLSL воды и patch() для материалов.
  * Тело — строки 156–324 модуля однофайловой Aquarium.html (D-13), перенесены дословно; швы — tests/split.test.js.
  * После тела — связка: reseed() и storePixelRatio(), через которые другие модули меняют seed и pixelRatio.
+ * A-03: подводные поверхности (patch) — вода в линейном свете до тонмаппинга: waterLinear, causFade, uHazeK.
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -64,7 +65,7 @@ const U = {
   uDeep: { value: new THREE.Color(0x02223a) }, uShallow: { value: new THREE.Color(0x1f8fb0) },
   uSunDir: { value: SUN }, uCurrent: { value: new THREE.Vector2(1, 0) }, uDrift: { value: new THREE.Vector2(0, 0) }, uPR: { value: pixelRatio },
   uNight: { value: 0 }, uWarm: { value: 0 }, uTurb: { value: 1 }, uCaus: { value: 1 }, uCausCol: { value: new THREE.Color(0.85, 1.0, 1.0) },
-  uAir: { value: 1 }, uGlowK: { value: 1 },
+  uAir: { value: 1 }, uGlowK: { value: 1 }, uHazeK: { value: 0.28 },   // A-03: brightness of the water colour (stylisation)
   uRip: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -100, 0)) },
   uKnock: { value: new THREE.Vector4(0, 0, 0, -100) },
 };
@@ -106,6 +107,24 @@ vec3 waterApply(vec3 col, vec3 p){
   float f = 1.0 - exp(-path * 0.085);
   return mix(col, waterColor(p.y), f);
 }
+// A-03: underwater surfaces (patch) in linear light, before tone mapping; waterApply above stays for the custom shaders.
+// Physical part: pure-water absorption AQ_ABS at ~650/550/450 nm [1/m] (Pope & Fry 1997); scale AQ_M, 1 u ~ 0.19 m (estimate).
+// Turbidity = scattering b = AQ_SCAT * uTurb [1/m], the same strength as the old haze. Stylisation: uHazeK, the brightness
+// of the in-scattered water colour (art-directed uDeep/uShallow palette), not a physical quantity.
+const vec3 AQ_ABS = vec3(0.34, 0.057, 0.0092);
+const float AQ_M = 0.19;
+const float AQ_SCAT = 0.447;
+uniform float uHazeK;
+vec3 waterLinear(vec3 col, vec3 p){
+  float b = AQ_SCAT * uTurb;
+  float d = waterPath(p) * AQ_M;
+  float z = clamp(uBoxMax.y - p.y, 0.0, uBoxMax.y - uBoxMin.y) * AQ_M;
+  col *= exp(-(AQ_ABS + 0.5 * b) * z);   // light that reached depth z from the surface (approximation)
+  float s = 1.0 - exp(-b * d);
+  return col * exp(-AQ_ABS * d) * (1.0 - s) + waterColor(p.y) * uHazeK * s;
+}
+// hypothesis (not measured): scattering blurs the caustic focus, so its contrast falls with depth and turbidity
+float causFade(vec3 p){ return exp(-1.5 * AQ_SCAT * uTurb * max(uBoxMax.y - p.y, 0.0) * AQ_M); }
 vec2 aqH22(vec2 p){ p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
 float aqVoro(vec2 x, float t){
   vec2 n = floor(x), f = fract(x); float m1 = 8.0, m2 = 8.0;
@@ -154,9 +173,9 @@ function patch(mat, o = {}) {
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec3 vWNrm;\n' + WATER_GLSL + (o.fHead || ''))
       .replace('#include <color_fragment>', o.color ? o.color : '#include <color_fragment>')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += diffuseColor.rgb * caustics(vWPos, normalize(vWNrm)) * ${(o.caustic ?? 1.0).toFixed(3)} * uCausCol;
+        totalEmissiveRadiance += diffuseColor.rgb * caustics(vWPos, normalize(vWNrm)) * ${(o.caustic ?? 1.0).toFixed(3)} * uCausCol * causFade(vWPos);
         ${o.emis || ''}`)
-      .replace('#include <fog_fragment>', 'gl_FragColor.rgb = waterApply(gl_FragColor.rgb, vWPos);');
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  gl_FragColor.rgb = waterLinear(gl_FragColor.rgb, vWPos);');   // A-03: linear light, before tone mapping
     if (o.near) fs = fs.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n if (length(vViewPosition) < ' + o.near.toFixed(2) + ') discard;');
     if (o.bump) fs = fs.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       { // procedural bump via screen-space derivatives (no textures)
