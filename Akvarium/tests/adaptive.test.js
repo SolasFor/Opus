@@ -135,7 +135,7 @@ test('встраивание: ?noadapt, разогрев по performance.now, �
   assert.match(fn, /if \(!NOADAPT && performance\.now\(\) - AD\.t0 > ADAPT\.WARM \* 1000\)/);
   assert.match(fn, /AD\.s = adaptStep\(AD\.s, 1 \/ ft, MAXPR\);/);
   assert.match(fn, /renderer\.setPixelRatio\(pixelRatio\); U\.uPR\.value = pixelRatio;/);
-  assert.match(fn, /window\.__aq = \{ ft, pixelRatio, calls: renderer\.info\.render\.calls, tris: renderer\.info\.render\.triangles \};/);
+  assert.match(fn, /window\.__aq = \{ ft, pixelRatio, calls: renderer\.info\.render\.calls, tris: renderer\.info\.render\.triangles, msaa: MSAA, programs: renderer\.info\.programs\.length, geometries: renderer\.info\.memory\.geometries, textures: renderer\.info\.memory\.textures \};/);
   assert.match(html, /function adaptReset\(\) \{ AD\.frames = 0; AD\.acc = 0; clock\.getDelta\(\); \}/);
   assert.match(html, /document\.addEventListener\('visibilitychange', adaptReset\);/);
   assert.match(html, /AD\.t0 = performance\.now\(\); window\.__aqScreen\('ready'\);/);
