@@ -7,12 +7,14 @@
  * A-02 (телефон, касание, доступность, D-12): жесты — ui/gestures.js, шторка — ui/sheet.js, строки и числа ru-RU —
  * ui/strings.ru.js; здесь — весь аквариум в кадре на узком экране (camK), сдвиг кадра над шторкой, reduced motion,
  * переключатель «Медузы», имена и состояния элементов для экранного диктора, правило Space/Enter, порядок Esc.
+ * A-04: голод и сытость рыб — sim/hunger.js; здесь только связка.
  */
 import * as THREE from 'three';
 import { applyLimits, CAM_HOME, camera, clamp, controls, D, fill, hemi, HS, HT, LIM, MAXPR, pixelRatio, renderer, rnd, rr, scene, smooth, storePixelRatio, sun, TGT_HOME, torch, U, W } from './core.js';
 import { AERATOR, ANEM_STARTLE, ANEMONES, lampMat, ripple, sandH } from './scenery.js';
 import { anthias, bub, BUB_N, bubbles, chromis, clowns, ENV, FISH_MATS, idols, jellies, makeEnv, SPECIES, storeEnv, tangs, ytang } from './creatures.js';
 import { ADAPT, ADAPT0, adaptStep } from './adapt.js';
+import { foodBoost, foodReach, hungerBite, hungerCopy, hungerInit, hungerStep } from './sim/hunger.js';
 import { FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT } from './ui/strings.ru.js';
 import { KIND, createGestures } from './ui/gestures.js';
 import { initSheet, setStop, SHEET } from './ui/sheet.js';
@@ -99,7 +101,7 @@ function commonForces(f, sp, dt) {
 function bite(f, fd, reach) {
   if (f.cd > 0) return false;
   if (f.p.distanceToSquared(fd.p) > reach * reach) return false;
-  fd.hp--; f.cd = 0.45 + rnd() * 0.6;
+  fd.hp--; f.cd = 0.45 + rnd() * 0.6; hungerBite(f);
   if (fd.hp <= 0) { fd.alive = false; foodAlive--; }
   f.v.addScaledVector(f.dir, -0.9);    // little dart back after each nibble
   return true;
@@ -137,7 +139,7 @@ function updateSchool(sp, k, dt, t) {
   attractor(k, t, ATT);
   const R2 = 1.1 * 1.1, S2 = 0.32 * 0.32;
   for (let i = 0; i < n; i++) {
-    const f = F[i]; ACC.set(0, 0, 0);
+    const f = F[i]; ACC.set(0, 0, 0); hungerStep(f, dt);
     let cnt = 0; const ali = V1.set(0, 0, 0), coh = V2.set(0, 0, 0), sep = V3.set(0, 0, 0);
     for (let j = 0; j < n; j++) {
       if (j === i) continue; const g = F[j];
@@ -152,8 +154,8 @@ function updateSchool(sp, k, dt, t) {
     for (let b = 0; b < BIGS.length; b++) { const B = BIGS[b]; const dx = f.p.x - B.p.x, dy = f.p.y - B.p.y, dz = f.p.z - B.p.z, d2 = dx * dx + dy * dy + dz * dz; if (d2 < 2.2) { const k3 = (2.2 - d2) * 2.5; ACC.x += dx * k3; ACC.y += dy * k3; ACC.z += dz * k3; f.boost = 1.3; } }
     let low = false, slow = false;
     if (foodAlive > 0) {
-      const fd = nearestFood(f.p, 6);
-      if (fd) { V4.subVectors(fd.p, f.p); const d = V4.length(); ACC.addScaledVector(V4.normalize(), d < 0.8 ? 4.5 : 3.0); f.boost = 1.35; low = true; slow = d < 0.7; bite(f, fd, 0.2); }
+      const fd = nearestFood(f.p, foodReach(f, 6));
+      if (fd) { V4.subVectors(fd.p, f.p); const d = V4.length(); ACC.addScaledVector(V4.normalize(), d < 0.8 ? 4.5 : 3.0); f.boost = foodBoost(f, 1.35); low = true; slow = d < 0.7; bite(f, fd, 0.2); }
     }
     commonForces(f, sp, dt);
     envForce(f, 0.9, ACC, 5, low);
@@ -176,15 +178,15 @@ function updateSolo(sp, dt) {
   for (let i = 0; i < F.length; i++) {
     const f = F[i];
     ACC.set(0, 0, 0);
-    f.tt -= dt;
+    f.tt -= dt; hungerStep(f, dt);
     if (f.tt <= 0 || f.p.distanceTo(f.target) < 0.6) { pickTarget(sp, f); f.tt = rr(5, 12); }
     let tgt = f.target, low = false, slow = false;
     f.boost = 1;
     const hiding = sp.home && f.hide > 0;
     if (hiding) { tgt = V4.set(HIDE_P.x + Math.sin(i * 2.1) * 0.18, HIDE_P.y, HIDE_P.z + Math.cos(i * 2.1) * 0.18); f.boost = 1.6; low = true; slow = f.p.distanceTo(tgt) < 0.5; }
     else if (foodAlive > 0) {
-      const fd = nearestFood(f.p, sp.home ? 2.5 : 5);
-      if (fd) { tgt = fd.p; f.boost = 1.4; low = true; slow = f.p.distanceTo(fd.p) < 0.9; bite(f, fd, 0.3 * f.scale + 0.15); }
+      const fd = nearestFood(f.p, foodReach(f, sp.home ? 2.5 : 5));
+      if (fd) { tgt = fd.p; f.boost = foodBoost(f, 1.4); low = true; slow = f.p.distanceTo(fd.p) < 0.9; bite(f, fd, 0.3 * f.scale + 0.15); }
     }
     V3.subVectors(tgt, f.p); const d = V3.length();
     V3.normalize().multiplyScalar(sp.speed[1] * f.boost * SPDK * Math.min(1, d / 1.5 + 0.3));
@@ -203,7 +205,7 @@ function setPopulation(p) {
     const n = Math.max(4, Math.round(sp.n * p));
     for (let i = sp.count; i < n; i++) {     // newcomers join next to an existing fish, so the school grows smoothly
       const src = sp.fish[(rnd() * Math.max(1, sp.count)) | 0];
-      sp.fish[i].p.copy(src.p).add(V1.set(rr(-0.3, 0.3), rr(-0.2, 0.2), rr(-0.3, 0.3))); sp.fish[i].v.copy(src.v);
+      sp.fish[i].p.copy(src.p).add(V1.set(rr(-0.3, 0.3), rr(-0.2, 0.2), rr(-0.3, 0.3))); sp.fish[i].v.copy(src.v); hungerCopy(sp.fish[i], src);
     }
     sp.count = n; sp.mesh.count = n;
   }
@@ -828,6 +830,8 @@ renderer.domElement.addEventListener('webglcontextrestored', () => {
   run.lost = false; adaptReset();
   window.__aqScreen(booted ? 'ready' : 'booting');
 });
+// A-04: initial hunger from a separate generator, so the scene seed sequence stays unchanged
+{ let s = 4204; const hr = () => (s = s * 16807 % 2147483647) / 2147483647; for (const sp of SPECIES) for (const f of sp.fish) hungerInit(f, hr); }
 // warm the simulation so fish start in natural formations
 for (let i = 0; i < 90; i++) { t += 1 / 30; U.uTime.value = t; updateSchool(chromis, 0, 1 / 30, t); updateSchool(anthias, 1, 1 / 30, t); updateSolo(clowns, 1 / 30); updateSolo(tangs, 1 / 30); updateSolo(ytang, 1 / 30); updateSolo(idols, 1 / 30); }
 renderer.setAnimationLoop(loop);
