@@ -6,18 +6,21 @@
  * A-03: подводные поверхности (patch) — вода в линейном свете до тонмаппинга: waterLinear, causFade, uHazeK.
  * A-03, шаг 2: каустики приходят по преломлённому солнцу (causSun, закон Снелла) — полные сверху, слабые на боку к солнцу,
  * нет на теневом боку и на брюхе.
+ * A-05: MSAA контекста WebGL выбирает msaaFor (perf/quality.js); решение — экспорт MSAA, main.js кладёт его в window.__aq.
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { msaaFor } from './perf/quality.js';
 
 // ------------------------------------------------------------------ basics
 const W = 16, D = 8, HT = 9.0, HS = 8.4;            // tank width, depth, glass height, water surface
 const BMIN = new THREE.Vector3(-W/2, -0.5, -D/2), BMAX = new THREE.Vector3(W/2, HS, D/2);
 const SUN = new THREE.Vector3(0.28, 1, 0.18).normalize();
 
+const MSAA = msaaFor(window.devicePixelRatio || 1, innerWidth, innerHeight, location.search);   // A-05: MSAA — только там, где он по карману
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+  renderer = new THREE.WebGLRenderer({ antialias: MSAA, alpha: true, powerPreference: 'high-performance' });
 } catch (e) {
   window.__aqFail('Браузер не смог включить 3D-графику (WebGL): она не поддерживается или отключена. ' +
     'Включите аппаратное ускорение в настройках браузера или откройте страницу в другом браузере.', ['reload']);
@@ -206,4 +209,4 @@ ${o.rough || ''}`)   // A-03 step 3: per-pixel roughness hook (fish scale glints
 // связка A-01b: seed и pixelRatio меняются только здесь (импортированную переменную другой модуль переназначить не может)
 const reseed = s => { seed = s; };
 const storePixelRatio = pr => { pixelRatio = pr; };
-export { applyLimits, CAM_HOME, camera, clamp, controls, D, fbm, fill, hemi, HS, HT, LIM, MAXPR, patch, pixelRatio, renderer, reseed, rnd, rr, scene, smooth, storePixelRatio, SUN, sun, TGT_HOME, torch, U, vnoise, W, WATER_GLSL };
+export { applyLimits, CAM_HOME, camera, clamp, controls, D, fbm, fill, hemi, HS, HT, LIM, MAXPR, MSAA, patch, pixelRatio, renderer, reseed, rnd, rr, scene, smooth, storePixelRatio, SUN, sun, TGT_HOME, torch, U, vnoise, W, WATER_GLSL };
