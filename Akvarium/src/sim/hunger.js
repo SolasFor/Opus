@@ -9,7 +9,7 @@
  * Шаг без выделения памяти: функции меняют поля переданной рыбы и возвращают её же.
  * Параметры HUNGER — в config/ecosystem.js (A-04, шаг 2), рядом с параметрами ночного отдыха.
  */
-import { HUNGER } from '../config/ecosystem.js';
+import { HUNGER, REMAINS } from '../config/ecosystem.js';
 
 function hungerInit(f, rnd) {
   const a = HUNGER.start[0], b = HUNGER.start[1];
@@ -57,4 +57,23 @@ function foodBoost(f, b) {
   return 1 + (b - 1) * (HUNGER.boostMin + (1 - HUNGER.boostMin) * foodInterest(f));
 }
 
-export { hungerInit, hungerCopy, hungerStep, hungerBite, foodInterest, foodReach, foodBoost };
+// остатки на песке (A-04, шаг 3). ages — возрасты лежащих хлопьев (первые n). Порог возраста, с которого хлопья растворяются быстрее:
+// Infinity, пока лежит не больше REMAINS.cap; иначе ускоряются n - cap самых старых. Сортирует ages на месте.
+function remainsCut(ages, n) {
+  if (!(n > REMAINS.cap)) return Infinity;
+  return ages.subarray(0, n).sort()[REMAINS.cap];
+}
+// возраст хлопья на песке после шага dt
+function remainsAge(ground, dt, cut) {
+  return ground + dt * (ground >= cut ? REMAINS.rush : 1);
+}
+function remainsGone(ground) {
+  return ground > REMAINS.life;
+}
+// множитель размера: 1, пока до конца жизни больше fade секунд, затем линейно до 0
+function remainsScale(ground) {
+  const k = (REMAINS.life - ground) / REMAINS.fade;
+  return k >= 1 ? 1 : k > 0 ? k : 0;
+}
+
+export { hungerInit, hungerCopy, hungerStep, hungerBite, foodInterest, foodReach, foodBoost, remainsCut, remainsAge, remainsGone, remainsScale };

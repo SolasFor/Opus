@@ -28,4 +28,8 @@ const REST = Object.freeze({
   spread: 0.4,        // доля дневного разброса цели клоунов у анемона при r = 1
 });
 
-export { HUNGER, REST };
+// остатки корма на песке (A-04, шаг 3): пока их не больше cap — прежнее поведение (life с на дне, последние fade с хлопья тают);
+// сверх cap самые старые растворяются в rush раз быстрее, чтобы дно не зарастало кормом при частом кормлении
+const REMAINS = Object.freeze({ life: 16, fade: 3, cap: 40, rush: 4 });
+
+export { HUNGER, REST, REMAINS };
