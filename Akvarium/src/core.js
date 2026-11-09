@@ -4,6 +4,7 @@
  * Тело — строки 156–324 модуля однофайловой Aquarium.html (D-13), перенесены дословно; швы — tests/split.test.js.
  * После тела — связка: reseed() и storePixelRatio(), через которые другие модули меняют seed и pixelRatio.
  * A-03: подводные поверхности (patch) — вода в линейном свете до тонмаппинга: waterLinear, causFade, uHazeK.
+ * A-03d: собственные шейдеры на той же воде: низ поверхности — waterLinear, лучи, снег, пузыри и медузы — WATER_T (aqTrans).
  * A-03, шаг 2: каустики приходят по преломлённому солнцу (causSun, закон Снелла) — полные сверху, слабые на боку к солнцу,
  * нет на теневом боку и на брюхе.
  * A-05: MSAA контекста WebGL выбирает msaaFor (perf/quality.js); решение — экспорт MSAA, main.js кладёт его в window.__aq.
@@ -105,14 +106,8 @@ float waterPath(vec3 p){
   float tn = clamp(max(max(tmin.x, tmin.y), tmin.z), 0.0, 1.0);
   return length(d) * (1.0 - tn);
 }
-vec3 waterApply(vec3 col, vec3 p){
-  float path = waterPath(p) * uTurb;
-  col *= exp(-path * vec3(0.10, 0.035, 0.022));
-  col *= mix(0.55, 1.0, clamp(p.y / uBoxMax.y, 0.0, 1.0));
-  float f = 1.0 - exp(-path * 0.085);
-  return mix(col, waterColor(p.y), f);
-}
-// A-03: underwater surfaces (patch) in linear light, before tone mapping; waterApply above stays for the custom shaders.
+// A-03: underwater surfaces (patch) in linear light, before tone mapping. A-03d: the old waterApply is removed - the custom
+// shaders use the same model (the surface underside calls waterLinear; rays, snow, bubbles and jellies use WATER_T below).
 // Physical part: pure-water absorption AQ_ABS at ~650/550/450 nm [1/m] (Pope & Fry 1997); scale AQ_M, 1 u ~ 0.19 m (estimate).
 // Turbidity = scattering b = AQ_SCAT * uTurb [1/m], the same strength as the old haze. Stylisation: uHazeK, the brightness
 // of the in-scattered water colour (art-directed uDeep/uShallow palette), not a physical quantity.
@@ -205,8 +200,23 @@ ${o.rough || ''}`)   // A-03 step 3: per-pixel roughness hook (fish scale glints
   return mat;
 }
 
+// A-03d: water for the custom (non-patched) shaders - god rays, marine snow, bubbles, jellies. The same physics as waterLinear:
+// pure-water absorption AQ_ABS on the sun path (depth below the surface; sunK = 1 for lit, 0 for self-emitted light) and on
+// the view path inside the box [m], plus out-scattering on the view path relative to the default turbidity (uTurb = 1), so the
+// default look keeps its haze level. In-scatter is not added: these shaders are additive or translucent and the water behind
+// them is already drawn. They write display values without tone mapping, so the factor is moved to display space (1/2.2).
+// Computed per vertex: the factor changes slowly over a mesh and the integrated GPU is fill-rate bound.
+const WATER_T = `
+vec3 aqTrans(vec3 p, vec3 bmin, vec3 bmax, float turb, float sunK){
+  vec3 dv = p - cameraPosition, dd = mix(dv, vec3(1e-6), step(abs(dv), vec3(1e-6)));
+  vec3 t0 = (bmin - cameraPosition) / dd, t1 = (bmax - cameraPosition) / dd, tn = min(t0, t1);
+  float d = length(dv) * (1.0 - clamp(max(max(tn.x, tn.y), tn.z), 0.0, 1.0)) * 0.19;
+  float z = clamp(bmax.y - p.y, 0.0, bmax.y - bmin.y) * 0.19 * sunK;
+  return pow(exp(-vec3(0.34, 0.057, 0.0092) * (z + d) - 0.447 * (turb - 1.0) * d), vec3(0.4545));
+}
+`;
 
 // связка A-01b: seed и pixelRatio меняются только здесь (импортированную переменную другой модуль переназначить не может)
 const reseed = s => { seed = s; };
 const storePixelRatio = pr => { pixelRatio = pr; };
-export { applyLimits, CAM_HOME, camera, clamp, controls, D, fbm, fill, hemi, HS, HT, LIM, MAXPR, MSAA, patch, pixelRatio, renderer, reseed, rnd, rr, scene, smooth, storePixelRatio, SUN, sun, TGT_HOME, torch, U, vnoise, W, WATER_GLSL };
+export { applyLimits, CAM_HOME, camera, clamp, controls, D, fbm, fill, hemi, HS, HT, LIM, MAXPR, MSAA, patch, pixelRatio, renderer, reseed, rnd, rr, scene, smooth, storePixelRatio, SUN, sun, TGT_HOME, torch, U, vnoise, W, WATER_GLSL, WATER_T };

@@ -5,7 +5,7 @@
  * Шов: seed = 2024 → reseed(2024). После тела — связка storeEnv(): main.js строит ENV заново после потери контекста.
  */
 import * as THREE from 'three';
-import { HS, patch, renderer, reseed, rnd, rr, scene, smooth, U } from './core.js';
+import { HS, patch, renderer, reseed, rnd, rr, scene, smooth, U, WATER_T } from './core.js';
 import { AERATOR, ANEMONES } from './scenery.js';
 
 // ------------------------------------------------------------------ fish geometry
@@ -68,11 +68,21 @@ const FISH_VERT = `
   vS = s;
   float env = 0.05 + 0.75 * s * s;
   float w = sin(s * 4.2 - aPhase);
-  transformed.x += w * env * uAmp * uLen;
-  if (aFin > 1.5) transformed.x += sign(position.x) * (0.5 + 0.5 * sin(aPhase * 0.7 + 1.0)) * 0.08 * uLen * abs(position.z - (uHalfL - 0.28 * uLen)) / (0.16 * uLen);
+  transformed.x += w * env * uAmp * uLen * aSwim.y;   // A-03d: aSwim.y = body-wave share (the pectoral cruise keeps the body almost straight)
+  if (aFin > 1.5) {   // pectoral fins: aSwim.x = stroke phase, aSwim.w = stroke amplitude (folded in during body-caudal bursts)
+    float fr = abs(position.z - (uHalfL - 0.28 * uLen)) / (0.16 * uLen);
+    transformed.x += sign(position.x) * (0.5 + 0.5 * sin(aSwim.x)) * 0.08 * uLen * fr * aSwim.w;
+    transformed.y += cos(aSwim.x) * 0.025 * uLen * fr * aSwim.w * (1.0 - aSwim.y);   // the fin tip traces a loop, not a line
+  }
+  if (abs(aSwim.z) > 0.001) {   // A-03d: C-start - the body bends into an arc of constant curvature, head and tail to one side;
+    // the length is kept, normals are not rotated (the bend lasts 0.3 s)
+    float kc = aSwim.z * 2.0 / uLen, zc = uHalfL - 0.35 * uLen, ph = kc * (zc - transformed.z), ox = transformed.x;
+    transformed.x = (1.0 - cos(ph)) / kc + ox * cos(ph);
+    transformed.z = zc - sin(ph) / kc + ox * sin(ph);
+  }
 `;
 const FISH_FRAG_HEAD = `varying vec3 vLp; varying float vFin; varying float vS; uniform float uHalfL; uniform float uLen; uniform float uH;`;
-const FISH_VERT_HEAD = `attribute float aPhase; attribute float aFin; varying vec3 vLp; varying float vFin; varying float vS; uniform float uHalfL; uniform float uLen; uniform float uAmp; uniform float uH;`;
+const FISH_VERT_HEAD = `attribute float aPhase; attribute vec4 aSwim; attribute float aFin; varying vec3 vLp; varying float vFin; varying float vS; uniform float uHalfL; uniform float uLen; uniform float uAmp; uniform float uH;`;
 const EYE = `
   { vec2 ec = vec2(uHalfL - 0.14 * uLen, 0.06 * uH); float er = 0.05 * uLen * EYES;
     float d = length(vec2(vLp.z, vLp.y) - ec);
@@ -139,6 +149,8 @@ function species(def) {
   const g = fishGeo(def.geo);
   const ph = new THREE.InstancedBufferAttribute(new Float32Array(def.n), 1); ph.setUsage(THREE.DynamicDrawUsage);
   g.setAttribute('aPhase', ph);
+  const sw = new THREE.InstancedBufferAttribute(new Float32Array(def.n * 4).map((_, j) => j % 2), 4); sw.setUsage(THREE.DynamicDrawUsage);   // A-03d: fin phase, body-wave share, C-bend, fin amplitude
+  g.setAttribute('aSwim', sw);
   const mesh = new THREE.InstancedMesh(g, fishMaterial(def.key, def.pattern, { L: def.geo.L, H: def.geo.H, amp: def.amp }, def.eyes || 1), def.n);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
@@ -152,13 +164,13 @@ function species(def) {
     fish.push({ p, v, dir: v.clone().normalize(), bank: 0, phase: rnd() * 6.28, scale: def.scale * rr(0.85, 1.15), target: p.clone(), tt: 0, food: null, st: 0, cd: 0, hide: 0, boost: 1, sp: null });
   }
   scene.add(mesh);
-  const sp = Object.assign({ mesh, fish, ph, count: def.n }, def);
+  const sp = Object.assign({ mesh, fish, ph, sw, count: def.n }, def);
   if (def.school) { sp.count = Math.round(def.n * def.def); mesh.count = sp.count; }
   SPECIES.push(sp); return sp;
 }
 reseed(2024);
 const chromis = species({
-  key: 'chromis', n: 150, def: 0.6, school: true, name: 'Хромис зелёный', latin: 'Chromis viridis', speed: [0.9, 2.0], scale: 1, amp: 0.09, freq: 9,
+  key: 'chromis', n: 150, def: 0.6, school: true, name: 'Хромис зелёный', latin: 'Chromis viridis', pect: true, speed: [0.9, 2.0], scale: 1, amp: 0.09, freq: 9,
   geo: { L: 0.42, H: 0.17, W: 0.07, tail: 0.13, tailH: 0.17, fork: 0.55, d0: 0.25, d1: 0.78, dH: 0.05, a0: 0.55, a1: 0.8, aH: 0.04 },
   pattern: `
     col = mix(vec3(0.62, 1.0, 0.86), vec3(0.08, 0.78, 0.70), smoothstep(-0.7, 0.5, yN));
@@ -177,7 +189,7 @@ const anthias = species({
     irid = 0.2;`
 });
 const clowns = species({
-  key: 'clown', n: 3, name: 'Рыба-клоун', latin: 'Amphiprion ocellaris', speed: [0.3, 0.8], scale: 1, amp: 0.13, freq: 11, home: new THREE.Vector3(ANEMONES[0].x, ANEMONES[0].y + 0.9, ANEMONES[0].z),
+  key: 'clown', n: 3, name: 'Рыба-клоун', latin: 'Amphiprion ocellaris', pect: true, speed: [0.3, 0.8], scale: 1, amp: 0.13, freq: 11, home: new THREE.Vector3(ANEMONES[0].x, ANEMONES[0].y + 0.9, ANEMONES[0].z),
   geo: { L: 0.62, H: 0.27, W: 0.14, tail: 0.15, tailH: 0.24, fork: -0.1, round: 0.3, d0: 0.25, d1: 0.82, dH: 0.09, a0: 0.6, a1: 0.85, aH: 0.07, ped: 0.18, pw: 0.7 },
   pattern: `
     col = vec3(1.0, 0.40, 0.04);
@@ -189,7 +201,7 @@ const clowns = species({
     irid = 0.05;`
 });
 const tangs = species({
-  key: 'tang', n: 2, name: 'Голубой хирург', latin: 'Paracanthurus hepatus', speed: [0.5, 1.2], scale: 1, amp: 0.08, freq: 6,
+  key: 'tang', n: 2, name: 'Голубой хирург', latin: 'Paracanthurus hepatus', pect: true, speed: [0.5, 1.2], scale: 1, amp: 0.08, freq: 6,
   geo: { L: 1.3, H: 0.78, W: 0.17, tail: 0.32, tailH: 0.55, fork: 0.25, d0: 0.18, d1: 0.9, dH: 0.12, a0: 0.45, a1: 0.9, aH: 0.1, ped: 0.11, pw: 0.6 },
   pattern: `
     col = vec3(0.08, 0.30, 0.95);
@@ -202,7 +214,7 @@ const tangs = species({
     irid = 0.3;`
 });
 const ytang = species({
-  key: 'ytang', n: 2, name: 'Жёлтый хирург', latin: 'Zebrasoma flavescens', speed: [0.5, 1.1], scale: 1, amp: 0.08, freq: 6,
+  key: 'ytang', n: 2, name: 'Жёлтый хирург', latin: 'Zebrasoma flavescens', pect: true, speed: [0.5, 1.1], scale: 1, amp: 0.08, freq: 6,
   geo: { L: 1.05, H: 0.82, W: 0.14, tail: 0.26, tailH: 0.48, fork: 0.0, round: 0.1, d0: 0.15, d1: 0.9, dH: 0.18, a0: 0.4, a1: 0.9, aH: 0.16, ped: 0.11, pw: 0.66 },
   pattern: `
     col = vec3(1.0, 0.82, 0.05);
@@ -231,12 +243,12 @@ const idols = species({
 // ------------------------------------------------------------------ bubbles (aerator can be switched off: no new bubbles spawn, the last ones rise and fade)
 const BUB_N = 120;
 const bubbles = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8), new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, uniforms: { uSky: U.uSky, uNight: U.uNight },
-  vertexShader: `varying vec3 vN; varying vec3 vV; void main(){ vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal); vV = cameraPosition - w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-  fragmentShader: `uniform vec3 uSky; uniform float uNight; varying vec3 vN; varying vec3 vV; void main(){ vec3 v = normalize(vV); vec3 n = normalize(vN); float f = 1.0 - abs(dot(v, n));
+  transparent: true, depthWrite: false, uniforms: { uSky: U.uSky, uNight: U.uNight, uTurb: U.uTurb, uBoxMin: U.uBoxMin, uBoxMax: U.uBoxMax },
+  vertexShader: `uniform float uTurb; uniform vec3 uBoxMin; uniform vec3 uBoxMax; varying vec3 vT;${WATER_T}varying vec3 vN; varying vec3 vV; void main(){ vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal); vV = cameraPosition - w.xyz; vT = aqTrans(w.xyz, uBoxMin, uBoxMax, uTurb, 1.0); gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uSky; uniform float uNight; varying vec3 vN; varying vec3 vV; varying vec3 vT; void main(){ vec3 v = normalize(vV); vec3 n = normalize(vN); float f = 1.0 - abs(dot(v, n));
     float rim = pow(f, 2.5); float spec = pow(max(dot(reflect(-v, n), normalize(vec3(0.3, 1.0, 0.4))), 0.0), 40.0);
     vec3 tint = mix(vec3(0.75, 0.95, 1.0), uSky, 0.5) * (1.0 - 0.55 * uNight);
-    vec3 c = tint * (rim * 1.1 + 0.08) + spec * 1.5 * tint; gl_FragColor = vec4(c, clamp(rim * 0.85 + 0.06 + spec, 0.0, 1.0)); }`
+    vec3 c = (tint * (rim * 1.1 + 0.08) + spec * 1.5 * tint) * vT; gl_FragColor = vec4(c, clamp(rim * 0.85 + 0.06 + spec, 0.0, 1.0)); }`
 }), BUB_N);
 bubbles.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bubbles.frustumCulled = false; bubbles.renderOrder = 7;
 scene.add(bubbles);
@@ -255,13 +267,13 @@ const jellies = [];
   const TN = 16, SEG = 18;
   for (let j = 0; j < 3; j++) {
     const mat = new THREE.ShaderMaterial({
-      uniforms: { uPulse: { value: 0 }, uCol: { value: JCOL[j][0] }, uGon: { value: JCOL[j][1] }, uNight: U.uNight, uTime: U.uTime, uBoxMin: U.uBoxMin, uBoxMax: U.uBoxMax },
+      uniforms: { uPulse: { value: 0 }, uCol: { value: JCOL[j][0] }, uGon: { value: JCOL[j][1] }, uNight: U.uNight, uTime: U.uTime, uBoxMin: U.uBoxMin, uBoxMax: U.uBoxMax, uTurb: U.uTurb },
       transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-      vertexShader: `uniform float uPulse; varying vec3 vN; varying vec3 vP; varying vec3 vL;
+      vertexShader: `uniform float uPulse; uniform vec3 uBoxMin; uniform vec3 uBoxMax; uniform float uTurb; varying vec3 vT;${WATER_T}varying vec3 vN; varying vec3 vP; varying vec3 vL;
         void main(){ vec3 p = position; float r = length(p.xz); float k = 1.0 - 0.2 * uPulse * smoothstep(0.2, 1.0, r); p.xz *= k; p.y *= 1.0 + 0.14 * uPulse;
           p.y -= 0.05 * sin(atan(p.z, p.x) * 16.0) * smoothstep(0.85, 1.05, r);   // scalloped margin
-          vL = position; vec4 w = modelMatrix * vec4(p, 1.0); vP = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
-      fragmentShader: `uniform vec3 uCol; uniform vec3 uGon; uniform float uNight; uniform float uTime; varying vec3 vN; varying vec3 vP; varying vec3 vL;
+          vL = position; vec4 w = modelMatrix * vec4(p, 1.0); vP = w.xyz; vT = aqTrans(w.xyz, uBoxMin, uBoxMax, uTurb, 0.0); vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
+      fragmentShader: `uniform vec3 uCol; uniform vec3 uGon; uniform float uNight; uniform float uTime; varying vec3 vN; varying vec3 vP; varying vec3 vL; varying vec3 vT;
         void main(){ vec3 v = normalize(cameraPosition - vP); float f = 1.0 - abs(dot(v, normalize(vN)));
           float a = atan(vL.z, vL.x), r = length(vL.xz);
           float gon = smoothstep(0.12, 0.0, abs(length(vec2(r * cos(a * 2.0), r * sin(a * 2.0)) - vec2(0.38, 0.0)) - 0.12)) * smoothstep(0.65, 0.2, r);
@@ -271,7 +283,7 @@ const jellies = [];
           float wave = 0.75 + 0.25 * sin(r * 10.0 - uTime * 2.5);
           vec3 c = uCol * (pow(f, 1.8) * 0.45 + 0.03 + canal * 0.08 + rimGlow * 0.14 * wave) + uGon * gon * 0.35;
           c += uCol * uNight * (rimGlow * 0.5 * wave + canal * 0.25);
-          c *= smoothstep(1.2, 0.95, r) * glow * 0.85;
+          c *= smoothstep(1.2, 0.95, r) * glow * 0.85 * vT;   // A-03d: the glow reaches the eye through the water (view path only)
           gl_FragColor = vec4(c, 1.0); }`
     });
     const m = new THREE.Mesh(bellG, mat); m.renderOrder = 8; scene.add(m);

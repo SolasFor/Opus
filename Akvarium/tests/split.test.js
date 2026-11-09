@@ -36,8 +36,8 @@ const WIRING = {
   creatures: ['', '// связка A-01b: после восстановления WebGL-контекста main.js строит окружение рыб заново',
     'const storeEnv = env => { ENV = env; };'],
 };
-const CHANGED = { main: 'A-02', core: 'A-03, A-05', scenery: 'A-03', creatures: 'A-03' };   // модуль → этап
-const NEW = { adapt: 'A-02', 'ui/strings.ru': 'A-02', 'ui/gestures': 'A-02', 'ui/sheet': 'A-02', 'config/ecosystem': 'A-04', 'sim/hunger': 'A-04', 'sim/rest': 'A-04', 'perf/quality': 'A-05' };   // модули, которых нет в Aquarium.html
+const CHANGED = { main: 'A-02, A-03d', core: 'A-03, A-05, A-03d', scenery: 'A-03, A-03d', creatures: 'A-03, A-03d' };   // модуль → этап
+const NEW = { adapt: 'A-02', 'ui/strings.ru': 'A-02', 'ui/gestures': 'A-02', 'ui/sheet': 'A-02', 'config/ecosystem': 'A-04', 'sim/hunger': 'A-04', 'sim/rest': 'A-04', 'sim/swim': 'A-03d', 'perf/quality': 'A-05' };   // модули, которых нет в Aquarium.html
 const LEGACY_ORDER = ORDER.filter(n => !NEW[n]);
 // имена, которые тесты импортируют из модулей: import { … } from '../src/<модуль>.js'
 const TESTS = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.test.js')).map(f => readFileSync(new URL(f, import.meta.url), 'utf8'));
