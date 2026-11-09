@@ -37,7 +37,7 @@ const WIRING = {
     'const storeEnv = env => { ENV = env; };'],
 };
 const CHANGED = { main: 'A-02' };   // модуль → этап
-const NEW = { adapt: 'A-02', 'ui/strings.ru': 'A-02', 'ui/gestures': 'A-02', 'ui/sheet': 'A-02' };   // модули, которых нет в Aquarium.html
+const NEW = { adapt: 'A-02', 'ui/strings.ru': 'A-02', 'ui/gestures': 'A-02', 'ui/sheet': 'A-02', 'config/ecosystem': 'A-04', 'sim/hunger': 'A-04', 'sim/rest': 'A-04' };   // модули, которых нет в Aquarium.html
 const LEGACY_ORDER = ORDER.filter(n => !NEW[n]);
 // имена, которые тесты импортируют из модулей: import { … } from '../src/<модуль>.js'
 const TESTS = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.test.js')).map(f => readFileSync(new URL(f, import.meta.url), 'utf8'));

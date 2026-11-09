@@ -7,13 +7,18 @@
  * A-02 (телефон, касание, доступность, D-12): жесты — ui/gestures.js, шторка — ui/sheet.js, строки и числа ru-RU —
  * ui/strings.ru.js; здесь — весь аквариум в кадре на узком экране (camK), сдвиг кадра над шторкой, reduced motion,
  * переключатель «Медузы», имена и состояния элементов для экранного диктора, правило Space/Enter, порядок Esc.
+ * A-04: голод и сытость рыб — sim/hunger.js; здесь только связка.
+ * A-04, шаг 2: ночной отдых и укрытия — sim/rest.js, параметры обеих моделей — config/ecosystem.js, подпись — ui/strings.ru.js.
  */
 import * as THREE from 'three';
 import { applyLimits, CAM_HOME, camera, clamp, controls, D, fill, hemi, HS, HT, LIM, MAXPR, pixelRatio, renderer, rnd, rr, scene, smooth, storePixelRatio, sun, TGT_HOME, torch, U, W } from './core.js';
 import { AERATOR, ANEM_STARTLE, ANEMONES, lampMat, ripple, sandH } from './scenery.js';
 import { anthias, bub, BUB_N, bubbles, chromis, clowns, ENV, FISH_MATS, idols, jellies, makeEnv, SPECIES, storeEnv, tangs, ytang } from './creatures.js';
 import { ADAPT, ADAPT0, adaptStep } from './adapt.js';
-import { FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT } from './ui/strings.ru.js';
+import { REST } from './config/ecosystem.js';
+import { foodBoost, foodReach, hungerBite, hungerCopy, hungerInit, hungerStep, remainsAge, remainsCut, remainsGone, remainsScale } from './sim/hunger.js';
+import { homeSpread, restAttractor, restWeight, shelterSide, shelterTop, speedHi } from './sim/rest.js';
+import { BEHAVIOR_NOTE, FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT } from './ui/strings.ru.js';
 import { KIND, createGestures } from './ui/gestures.js';
 import { initSheet, setStop, SHEET } from './ui/sheet.js';
 
@@ -31,7 +36,8 @@ const foodPts = new THREE.Points(foodG, new THREE.ShaderMaterial({
 foodPts.frustumCulled = false; scene.add(foodPts);
 const food = [];
 for (let i = 0; i < FOOD_N; i++) food.push({ p: new THREE.Vector3(0, -999, 0), alive: false, t: 0, ph: rnd() * 6.28, hp: 0, ground: 0, rippled: false });
-let foodCursor = 0, foodAlive = 0;
+let foodCursor = 0, foodAlive = 0, foodGround = 0;
+const groundAges = new Float32Array(FOOD_N);   // A-04 step 3: ages of flakes lying on the sand, refilled every frame
 function dropFood(x, z, n = 12, spread = 0.6) {
   x = clamp(x, -W / 2 + 0.5, W / 2 - 0.5); z = clamp(z, -D / 2 + 0.5, D / 2 - 0.5);
   for (let i = 0; i < n; i++) {
@@ -59,6 +65,9 @@ const BIGS = [...tangs.fish, ...ytang.fish, ...idols.fish];
 const ANEM0 = ANEMONES[0], HIDE_P = new THREE.Vector3(ANEM0.x, ANEM0.y + 0.42, ANEM0.z);
 const mouse = { in: false, ndc: new THREE.Vector2(), x: 0, y: 0, ray: new THREE.Ray(), active: false };
 let SPDK = 1;   // global speed factor (fish are lazier at night)
+let RW = 0;     // A-04: вес ночного отдыха 0…1 (sim/rest.js); днём и на закате 0 — поведение прежнее
+const SHELTER = REST.school.map(j => shelterTop(OBST[j], new THREE.Vector3()));   // укрытия стай над рифом (индекс k в updateSchool)
+const SOLO_ROCK = new Map([[tangs, REST.solo.tang], [ytang, REST.solo.ytang], [idols, REST.solo.idol]]);   // камни одиночных рыб
 
 function envForce(f, margin, out, strength, low) {
   const p = f.p;
@@ -99,7 +108,7 @@ function commonForces(f, sp, dt) {
 function bite(f, fd, reach) {
   if (f.cd > 0) return false;
   if (f.p.distanceToSquared(fd.p) > reach * reach) return false;
-  fd.hp--; f.cd = 0.45 + rnd() * 0.6;
+  fd.hp--; f.cd = 0.45 + rnd() * 0.6; hungerBite(f);
   if (fd.hp <= 0) { fd.alive = false; foodAlive--; }
   f.v.addScaledVector(f.dir, -0.9);    // little dart back after each nibble
   return true;
@@ -107,7 +116,7 @@ function bite(f, fd, reach) {
 function integrate(sp, f, dt, maxF, slow) {
   ACC.clampLength(0, maxF * (1 + f.st * 2));
   f.v.addScaledVector(ACC, dt);
-  const sp2 = f.v.length(), boost = f.boost * (1 + f.st * 1.6), hi = sp.speed[1] * boost * SPDK, lo = sp.speed[0] * SPDK * (slow ? 0.3 : 1);
+  const sp2 = f.v.length(), boost = f.boost * (1 + f.st * 1.6), hi = speedHi(sp.speed[0], sp.speed[1], RW) * boost * SPDK, lo = sp.speed[0] * SPDK * (slow ? 0.3 : 1);
   if (sp2 > hi) f.v.multiplyScalar(hi / sp2);
   if (sp2 < lo) f.v.multiplyScalar(lo / Math.max(sp2, 1e-4));
   const lim = f.v.length() * (slow ? 0.9 : 0.45); f.v.y = clamp(f.v.y, -lim, lim);
@@ -135,9 +144,10 @@ function attractor(k, t, out) {
 function updateSchool(sp, k, dt, t) {
   const F = sp.fish, n = sp.count;
   attractor(k, t, ATT);
+  if (RW > 0) restAttractor(ATT, SHELTER[k], RW, ATT);   // A-04: ночью стая стягивается к укрытию над рифом
   const R2 = 1.1 * 1.1, S2 = 0.32 * 0.32;
   for (let i = 0; i < n; i++) {
-    const f = F[i]; ACC.set(0, 0, 0);
+    const f = F[i]; ACC.set(0, 0, 0); hungerStep(f, dt);
     let cnt = 0; const ali = V1.set(0, 0, 0), coh = V2.set(0, 0, 0), sep = V3.set(0, 0, 0);
     for (let j = 0; j < n; j++) {
       if (j === i) continue; const g = F[j];
@@ -152,8 +162,8 @@ function updateSchool(sp, k, dt, t) {
     for (let b = 0; b < BIGS.length; b++) { const B = BIGS[b]; const dx = f.p.x - B.p.x, dy = f.p.y - B.p.y, dz = f.p.z - B.p.z, d2 = dx * dx + dy * dy + dz * dz; if (d2 < 2.2) { const k3 = (2.2 - d2) * 2.5; ACC.x += dx * k3; ACC.y += dy * k3; ACC.z += dz * k3; f.boost = 1.3; } }
     let low = false, slow = false;
     if (foodAlive > 0) {
-      const fd = nearestFood(f.p, 6);
-      if (fd) { V4.subVectors(fd.p, f.p); const d = V4.length(); ACC.addScaledVector(V4.normalize(), d < 0.8 ? 4.5 : 3.0); f.boost = 1.35; low = true; slow = d < 0.7; bite(f, fd, 0.2); }
+      const fd = nearestFood(f.p, foodReach(f, 6));
+      if (fd) { V4.subVectors(fd.p, f.p); const d = V4.length(); ACC.addScaledVector(V4.normalize(), d < 0.8 ? 4.5 : 3.0); f.boost = foodBoost(f, 1.35); low = true; slow = d < 0.7; bite(f, fd, 0.2); }
     }
     commonForces(f, sp, dt);
     envForce(f, 0.9, ACC, 5, low);
@@ -163,7 +173,9 @@ function updateSchool(sp, k, dt, t) {
   }
 }
 function pickTarget(sp, f) {
-  if (sp.home) { f.target.set(sp.home.x + rr(-0.9, 0.9), sp.home.y + rr(-0.4, 0.6) - K.night * 0.35, sp.home.z + rr(-0.9, 0.9)); return; }
+  if (sp.home) { const s = homeSpread(RW); f.target.set(sp.home.x + rr(-0.9, 0.9) * s, sp.home.y + rr(-0.4, 0.6) - K.night * 0.35, sp.home.z + rr(-0.9, 0.9) * s); return; }
+  const rocks = SOLO_ROCK.get(sp);   // A-04: ночью с вероятностью RW — точка у бока камня; днём rnd() здесь не вызывается
+  if (rocks && RW > 0 && rnd() < RW) { shelterSide(OBST[rocks[sp.fish.indexOf(f) % rocks.length]], rr(REST.side[0], REST.side[1]), f.target); return; }
   for (let tries = 0; tries < 12; tries++) {
     f.target.set(rr(-6.2, 6.2), rr(1.8, 7.0 - K.night * 2), rr(-2.0, 2.6));
     if (f.target.y < sandH(f.target.x, f.target.z) + 1.2) continue;
@@ -176,18 +188,18 @@ function updateSolo(sp, dt) {
   for (let i = 0; i < F.length; i++) {
     const f = F[i];
     ACC.set(0, 0, 0);
-    f.tt -= dt;
+    f.tt -= dt; hungerStep(f, dt);
     if (f.tt <= 0 || f.p.distanceTo(f.target) < 0.6) { pickTarget(sp, f); f.tt = rr(5, 12); }
     let tgt = f.target, low = false, slow = false;
     f.boost = 1;
     const hiding = sp.home && f.hide > 0;
     if (hiding) { tgt = V4.set(HIDE_P.x + Math.sin(i * 2.1) * 0.18, HIDE_P.y, HIDE_P.z + Math.cos(i * 2.1) * 0.18); f.boost = 1.6; low = true; slow = f.p.distanceTo(tgt) < 0.5; }
     else if (foodAlive > 0) {
-      const fd = nearestFood(f.p, sp.home ? 2.5 : 5);
-      if (fd) { tgt = fd.p; f.boost = 1.4; low = true; slow = f.p.distanceTo(fd.p) < 0.9; bite(f, fd, 0.3 * f.scale + 0.15); }
+      const fd = nearestFood(f.p, foodReach(f, sp.home ? 2.5 : 5));
+      if (fd) { tgt = fd.p; f.boost = foodBoost(f, 1.4); low = true; slow = f.p.distanceTo(fd.p) < 0.9; bite(f, fd, 0.3 * f.scale + 0.15); }
     }
     V3.subVectors(tgt, f.p); const d = V3.length();
-    V3.normalize().multiplyScalar(sp.speed[1] * f.boost * SPDK * Math.min(1, d / 1.5 + 0.3));
+    V3.normalize().multiplyScalar(speedHi(sp.speed[0], sp.speed[1], RW) * f.boost * SPDK * Math.min(1, d / 1.5 + 0.3));
     ACC.addScaledVector(V3.sub(f.v), sp.home ? 1.6 : 0.8);
     for (const g of F) if (g !== f) { V1.subVectors(f.p, g.p); const d2 = V1.lengthSq(); if (d2 < 1.0) ACC.addScaledVector(V1, (1 - d2) * 2); }
     commonForces(f, sp, dt);
@@ -203,7 +215,7 @@ function setPopulation(p) {
     const n = Math.max(4, Math.round(sp.n * p));
     for (let i = sp.count; i < n; i++) {     // newcomers join next to an existing fish, so the school grows smoothly
       const src = sp.fish[(rnd() * Math.max(1, sp.count)) | 0];
-      sp.fish[i].p.copy(src.p).add(V1.set(rr(-0.3, 0.3), rr(-0.2, 0.2), rr(-0.3, 0.3))); sp.fish[i].v.copy(src.v);
+      sp.fish[i].p.copy(src.p).add(V1.set(rr(-0.3, 0.3), rr(-0.2, 0.2), rr(-0.3, 0.3))); sp.fish[i].v.copy(src.v); hungerCopy(sp.fish[i], src);
     }
     sp.count = n; sp.mesh.count = n;
   }
@@ -374,7 +386,8 @@ function updateJellies(dt) {
   }
 }
 function updateFood(dt) {
-  let n = 0;
+  const cut = remainsCut(groundAges, foodGround);   // A-04 step 3: over REMAINS.cap the oldest leftovers dissolve faster
+  let n = 0, gn = 0;
   for (let i = 0; i < FOOD_N; i++) {
     const f = food[i];
     if (f.alive) {
@@ -386,13 +399,13 @@ function updateFood(dt) {
         f.p.x += (Math.sin(t * 1.5 + f.ph) * 0.12 + U.uCurrent.value.x * 0.12) * dt; f.p.z += (Math.cos(t * 1.2 + f.ph) * 0.1 + U.uCurrent.value.y * 0.12) * dt;
         f.p.x = clamp(f.p.x, -W / 2 + 0.2, W / 2 - 0.2); f.p.z = clamp(f.p.z, -D / 2 + 0.2, D / 2 - 0.2);
         if (f.p.y < g) f.p.y = g;
-      } else { f.ground += dt; if (f.ground > 16) f.alive = false; }   // leftovers dissolve after a while
+      } else { f.ground = remainsAge(f.ground, dt, cut); if (remainsGone(f.ground)) f.alive = false; else groundAges[gn++] = f.ground; }   // leftovers dissolve after a while (A-04 step 3: capped)
     }
     if (f.alive) n++;
     foodArr[i * 3] = f.alive ? f.p.x : 0; foodArr[i * 3 + 1] = f.alive ? f.p.y : -999; foodArr[i * 3 + 2] = f.alive ? f.p.z : 0;
-    foodSz[i] = f.alive ? (0.55 + 0.15 * f.hp) * (f.ground > 13 ? (16 - f.ground) / 3 : 1) : 0;
+    foodSz[i] = f.alive ? (0.55 + 0.15 * f.hp) * remainsScale(f.ground) : 0;
   }
-  foodAlive = n;
+  foodAlive = n; foodGround = gn;
   foodG.attributes.position.needsUpdate = true; foodG.attributes.aSz.needsUpdate = true;
 }
 
@@ -422,7 +435,7 @@ function updateLighting() {
   U.uGlowK.value = 1 + 1.5 * K.night; U.uTurb.value = 0.4 + 2.0 * K.turb;
   renderer.toneMappingExposure = 1.08 + 0.3 * K.night;
   for (const m of FISH_MATS) m.envMapIntensity = 0.55 * (1 - 0.75 * K.night);
-  SPDK = 1 - 0.3 * K.night;
+  SPDK = 1 - 0.3 * K.night; RW = restWeight(K.night);
 }
 
 // ------------------------------------------------------------------ camera: intro dolly, auto-orbit, free mode, chase cam
@@ -527,6 +540,10 @@ SLIDERS.forEach(([k, label, mn, mx, st]) => {
   inp.addEventListener('change', () => blurIfPointer(inp));
   SL[k] = { inp, out }; out.textContent = fmt[k](K[k]); inp.setAttribute('aria-valuetext', vtext[k](K[k]));
   panel.querySelector('#sliders').appendChild(row);
+  if (k === 'pop') {   // A-04: подпись «стилизованное поведение» под ползунком «Рыбы»
+    const note = document.createElement('p'); note.className = 'note'; note.id = 'behaviorNote'; note.textContent = BEHAVIOR_NOTE;
+    inp.setAttribute('aria-describedby', 'behaviorNote'); row.after(note);
+  }
 });
 TOGGLES.forEach(([k, label, key]) => {
   const row = document.createElement('label'); row.className = 'tog';
@@ -828,6 +845,8 @@ renderer.domElement.addEventListener('webglcontextrestored', () => {
   run.lost = false; adaptReset();
   window.__aqScreen(booted ? 'ready' : 'booting');
 });
+// A-04: initial hunger from a separate generator, so the scene seed sequence stays unchanged
+{ let s = 4204; const hr = () => (s = s * 16807 % 2147483647) / 2147483647; for (const sp of SPECIES) for (const f of sp.fish) hungerInit(f, hr); }
 // warm the simulation so fish start in natural formations
 for (let i = 0; i < 90; i++) { t += 1 / 30; U.uTime.value = t; updateSchool(chromis, 0, 1 / 30, t); updateSchool(anthias, 1, 1 / 30, t); updateSolo(clowns, 1 / 30); updateSolo(tangs, 1 / 30); updateSolo(ytang, 1 / 30); updateSolo(idols, 1 / 30); }
 renderer.setAnimationLoop(loop);

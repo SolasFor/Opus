@@ -5,7 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT, fishCount } from '../src/ui/strings.ru.js';
+import { BEHAVIOR_NOTE, FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT, fishCount } from '../src/ui/strings.ru.js';
 import { LEGACY } from './_app.js';
 
 const NB = '\u00a0';
@@ -61,4 +61,10 @@ test('вид от рыбы и подписи: свой текст для мыш�
   assert.match(S.follow('Рыба-клоун'), /^Камера следует: <b>Рыба-клоун<\/b><span class="k-mouse"> · C \/ Esc — выход, двойной клик — другая рыба<\/span><span class="k-touch"> · двойное касание — другая рыба<\/span>$/);
   assert.deepEqual(S.tipFollow, { mouse: ' · двойной клик — следить', touch: ' · двойное касание — следить' });
   assert.match(S.scene, /^Аквариум: /);
+});
+
+test('A-04: подпись «стилизованное поведение» под ползунком «Рыбы»', () => {
+  assert.match(BEHAVIOR_NOTE, /^Стилизованное поведение: /);
+  assert.match(BEHAVIOR_NOTE, /голод, сытость и ночной отдых/);
+  assert.ok(!/[<>]/.test(BEHAVIOR_NOTE), 'только текст (textContent)');
 });
