@@ -36,10 +36,12 @@ test('msaaFor: ?aa=1 и ?aa=0 переопределяют выбор, проч�
 });
 
 test('startPR: типичные окна', () => {
-  assert.equal(startPR(1.75, 1440, 900, false), 1.75);   // 3,97 Мп — как до A-05
+  assert.equal(startPR(1.75, 1440, 900, false), 1.25);   // Р-A15: 3,97 Мп > 2,6 — ступень 1.25 (2,03 Мп)
   assert.equal(startPR(1, 1920, 1080, true), 1);
   assert.equal(startPR(1.1, 1920, 1080, true), 1);       // 2,5 Мп с MSAA — ступень 1
-  assert.equal(startPR(1.5, 2560, 1440, false), 1);      // 4K при 150 %: 8,3 → 3,7 Мп
+  assert.equal(startPR(1.5, 2560, 1440, false), 0.75);   // 4K при 150 %: 3,7 Мп при 1 > 2,6 — ступень 0.75 (2,07 Мп)
+  assert.equal(startPR(1.5, 1280, 720, false), 1.5);     // FHD при 150 %: 2,07 Мп — без изменений
+  assert.equal(startPR(1.25, 1536, 864, false), 1.25);   // FHD при 125 %: 2,07 Мп — без изменений
   assert.equal(startPR(1, 3840, 2160, false), 0.75);     // 8,3 Мп: не ниже MIN
   assert.equal(startPR(1.75, 390, 844, false), 1.75);    // телефон
 });

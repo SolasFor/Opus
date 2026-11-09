@@ -13,6 +13,7 @@
 // Р-A13 (A-05, утверждено 9 ноября 2026 г.): LOW 45 → 55 — разрешение снижается, когда кадр ниже бюджета iGPU (≥ 55 кадров/с).
 // Р-A14 (A-05b, 9 ноября 2026 г.): jank — доля кадров дольше LONG (25 мс) за окно, 0…1; по умолчанию 0 — как в A-05.
 // jank > JANK (5 %) — окно медленное и при fps ≥ LOW; подъём — только при jank ≤ JANK_UP (2 %). Бюджет iGPU: p95 кадра ≤ 25 мс.
+// Р-A15 (A-05b, 9 ноября 2026 г.): на iGPU долгие кадры — от GPU (JS кадра 1–7 мс); неудачная проба повышения стоит одно окно, а не SLOW.
 const ADAPT = { WIN: 2, WARM: 5, LOW: 55, HIGH: 58, STEP: 0.25, MIN: 0.75, SLOW: 2, HOLD: 3, HOLD_MAX: 24, TRIAL: 5, LONG: 0.025, JANK: 0.05, JANK_UP: 0.02 };
 const ADAPT0 = { pr: 1, slow: 0, good: 0, hold: ADAPT.HOLD, since: Infinity };
 function adaptStep(s, fps, maxPR, jank = 0) {
@@ -20,7 +21,8 @@ function adaptStep(s, fps, maxPR, jank = 0) {
   since++;
   if (fps < ADAPT.LOW || jank > ADAPT.JANK) {
     good = 0;
-    if (pr > ADAPT.MIN && ++slow >= ADAPT.SLOW) {
+    // Р-A15: проба (первые TRIAL окон после подъёма) с долей долгих кадров выше JANK снимается за одно окно
+    if (pr > ADAPT.MIN && (++slow >= ADAPT.SLOW || (since <= ADAPT.TRIAL && jank > ADAPT.JANK))) {
       if (since <= ADAPT.TRIAL) hold = Math.min(ADAPT.HOLD_MAX, hold * 2);
       pr = Math.max(ADAPT.MIN, pr - ADAPT.STEP); slow = 0; since = Infinity;
     }
