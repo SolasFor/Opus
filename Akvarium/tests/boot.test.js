@@ -4,6 +4,7 @@
  * lost — потерян WebGL-контекст после запуска. Первая причина сбоя побеждает, после ready сбой запуска не объявляется.
  * Модуль не загрузился (onerror) — сразу сообщение о CDN и кнопка «Повторить». Плюс статические проверки разметки
  * и модуля: цикл кадров, потеря контекста, фавиконка, three.js только с unpkg (D-07 отклонено владельцем).
+ * A-02: страница, открытая как файл (file://), сразу объясняет, что нужен веб-сервер, и ведёт на Aquarium.html.
  * Без сторонних зависимостей.
  */
 import test from 'node:test';
@@ -20,7 +21,7 @@ function el() {
   return { hidden: false, className: '', innerHTML: '', classList: { add: c => cls.add(c), remove: c => cls.delete(c), contains: c => cls.has(c) } };
 }
 // Загружает экран запуска: поддельные таймеры (tick) и window с addEventListener; dispatch('error', {message}) — ошибка скрипта
-function boot() {
+function boot(protocol = 'https:') {
   let now = 0, seq = 0; const timers = new Map(), listeners = {}, attrs = {};
   const bubs = el(), box = el(), msg = el(), act = el();
   act.hidden = true; box.querySelector = s => (s === '.bubs' ? bubs : null);
@@ -30,7 +31,7 @@ function boot() {
       documentElement: { setAttribute: (k, v) => { attrs[k] = String(v); }, getAttribute: k => attrs[k] ?? null },
       getElementById: id => byId[id] || null,
     },
-    location: { protocol: 'https:', reload() {} },
+    location: { protocol, reload() {} },
     setTimeout: (fn, ms) => { timers.set(++seq, { at: now + ms, fn }); return seq; },
     clearTimeout: id => { timers.delete(id); },
     addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); },
@@ -122,6 +123,22 @@ test('__aqFail без причины — как раньше: сообщение
   b.g.__aqFail('Браузер не смог включить 3D-графику (WebGL)', ['reload']);
   assert.match(b.msg.innerHTML, /WebGL/);
   assert.deepEqual(b.buttons(), ['Перезагрузить']);
+});
+
+test('A-02: открыто как файл (file://) — сразу failed: нужен веб-сервер, ссылка на однофайловую Aquarium.html', () => {
+  const b = boot('file:');
+  assert.equal(b.state(), 'failed');
+  assert.match(b.msg.innerHTML, /Не удалось запустить аквариум/);
+  assert.match(b.msg.innerHTML, /работает через веб-сервер/);
+  assert.match(b.msg.innerHTML, /<code>python3 -m http\.server<\/code>/);
+  assert.equal(b.act.innerHTML, '<a href="./Aquarium.html">Открыть Aquarium.html</a>');
+  assert.deepEqual(b.buttons(), []);
+  assert.equal(b.act.hidden, false);
+  b.g.__aqModuleError();                    // модуль из file:// не загрузится — причина остаётся прежней
+  b.tick(20000);
+  assert.equal(b.state(), 'failed');
+  assert.match(b.msg.innerHTML, /веб-сервер/);
+  assert.equal(boot('http:').state(), 'booting');
 });
 
 test('ошибка скрипта до ready — «Ошибка при запуске» с экранированием и «Перезагрузить»', () => {
