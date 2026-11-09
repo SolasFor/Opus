@@ -177,6 +177,8 @@ function patch(mat, o = {}) {
     let fs = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec3 vWNrm;\n' + WATER_GLSL + (o.fHead || ''))
       .replace('#include <color_fragment>', o.color ? o.color : '#include <color_fragment>')
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+${o.rough || ''}`)   // A-03 step 3: per-pixel roughness hook (fish scale glints)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += diffuseColor.rgb * caustics(vWPos, normalize(vWNrm)) * ${(o.caustic ?? 1.0).toFixed(3)} * uCausCol * causFade(vWPos);
         ${o.emis || ''}`)

@@ -114,7 +114,7 @@ function sandH(x, z) {
   }
   const tex = new THREE.DataTexture(data, S, S); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(14, 7);
   tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true; tex.needsUpdate = true;
-  const m = patch(new THREE.MeshStandardMaterial({ vertexColors: true, map: tex, roughness: 1.0, metalness: 0 }), { key: 'sand', caustic: 2.2 });
+  const m = patch(new THREE.MeshStandardMaterial({ vertexColors: true, map: tex, roughness: 1.0, metalness: 0 }), { key: 'sand', caustic: 2.2, bump: 0.05, bumpFreq: '7.0' });
   scene.add(new THREE.Mesh(g, m));
 }
 
