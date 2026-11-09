@@ -3,6 +3,9 @@
  * (общее зерно seed), общий GLSL воды и patch() для материалов.
  * Тело — строки 156–324 модуля однофайловой Aquarium.html (D-13), перенесены дословно; швы — tests/split.test.js.
  * После тела — связка: reseed() и storePixelRatio(), через которые другие модули меняют seed и pixelRatio.
+ * A-03: подводные поверхности (patch) — вода в линейном свете до тонмаппинга: waterLinear, causFade, uHazeK.
+ * A-03, шаг 2: каустики приходят по преломлённому солнцу (causSun, закон Снелла) — полные сверху, слабые на боку к солнцу,
+ * нет на теневом боку и на брюхе.
  * A-05: MSAA контекста WebGL выбирает msaaFor (perf/quality.js); решение — экспорт MSAA, main.js кладёт его в window.__aq.
  */
 import * as THREE from 'three';
@@ -67,7 +70,7 @@ const U = {
   uDeep: { value: new THREE.Color(0x02223a) }, uShallow: { value: new THREE.Color(0x1f8fb0) },
   uSunDir: { value: SUN }, uCurrent: { value: new THREE.Vector2(1, 0) }, uDrift: { value: new THREE.Vector2(0, 0) }, uPR: { value: pixelRatio },
   uNight: { value: 0 }, uWarm: { value: 0 }, uTurb: { value: 1 }, uCaus: { value: 1 }, uCausCol: { value: new THREE.Color(0.85, 1.0, 1.0) },
-  uAir: { value: 1 }, uGlowK: { value: 1 },
+  uAir: { value: 1 }, uGlowK: { value: 1 }, uHazeK: { value: 0.28 },   // A-03: brightness of the water colour (stylisation)
   uRip: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -100, 0)) },
   uKnock: { value: new THREE.Vector4(0, 0, 0, -100) },
 };
@@ -109,6 +112,24 @@ vec3 waterApply(vec3 col, vec3 p){
   float f = 1.0 - exp(-path * 0.085);
   return mix(col, waterColor(p.y), f);
 }
+// A-03: underwater surfaces (patch) in linear light, before tone mapping; waterApply above stays for the custom shaders.
+// Physical part: pure-water absorption AQ_ABS at ~650/550/450 nm [1/m] (Pope & Fry 1997); scale AQ_M, 1 u ~ 0.19 m (estimate).
+// Turbidity = scattering b = AQ_SCAT * uTurb [1/m], the same strength as the old haze. Stylisation: uHazeK, the brightness
+// of the in-scattered water colour (art-directed uDeep/uShallow palette), not a physical quantity.
+const vec3 AQ_ABS = vec3(0.34, 0.057, 0.0092);
+const float AQ_M = 0.19;
+const float AQ_SCAT = 0.447;
+uniform float uHazeK;
+vec3 waterLinear(vec3 col, vec3 p){
+  float b = AQ_SCAT * uTurb;
+  float d = waterPath(p) * AQ_M;
+  float z = clamp(uBoxMax.y - p.y, 0.0, uBoxMax.y - uBoxMin.y) * AQ_M;
+  col *= exp(-(AQ_ABS + 0.5 * b) * z);   // light that reached depth z from the surface (approximation)
+  float s = 1.0 - exp(-b * d);
+  return col * exp(-AQ_ABS * d) * (1.0 - s) + waterColor(p.y) * uHazeK * s;
+}
+// hypothesis (not measured): scattering blurs the caustic focus, so its contrast falls with depth and turbidity
+float causFade(vec3 p){ return exp(-1.5 * AQ_SCAT * uTurb * max(uBoxMax.y - p.y, 0.0) * AQ_M); }
 vec2 aqH22(vec2 p){ p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
 float aqVoro(vec2 x, float t){
   vec2 n = floor(x), f = fract(x); float m1 = 8.0, m2 = 8.0;
@@ -126,10 +147,13 @@ float causticT(vec2 uv, float time){
   float c1 = pow(1.0 - clamp(e1 * 2.4, 0.0, 1.0), 5.0), c2 = pow(1.0 - clamp(e2 * 2.6, 0.0, 1.0), 6.0);
   return c1 * 0.8 + c2 * 0.5 + c1 * c2 * 1.2;
 }
+// A-03 step 2: caustic light arrives along the sun direction refracted at the surface (Snell, water n = 1.333),
+// so it is Lambert-weighted against that direction and normalised to 1 on up-facing surfaces.
+vec3 causSun(){ vec3 s = normalize(uSunDir); float sa = length(s.xz), sw = sa / 1.333; vec2 h = sa > 1e-4 ? s.xz * (sw / sa) : vec2(0.0); return vec3(h.x, sqrt(1.0 - sw * sw), h.y); }
 float caustics(vec3 p, vec3 n){
   vec2 uv = p.xz + uSunDir.xz / uSunDir.y * (uBoxMax.y - p.y);
   float c = causticT(uv * 0.3, uTime * 0.7);
-  float up = clamp(n.y * 0.8 + 0.2, 0.0, 1.0);
+  vec3 cs = causSun(); float up = clamp(dot(n, cs) / cs.y, 0.0, 1.0);
   return c * up * mix(0.45, 1.0, clamp(p.y / uBoxMax.y, 0.0, 1.0)) * uCaus;
 }
 float bHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -156,10 +180,12 @@ function patch(mat, o = {}) {
     let fs = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec3 vWNrm;\n' + WATER_GLSL + (o.fHead || ''))
       .replace('#include <color_fragment>', o.color ? o.color : '#include <color_fragment>')
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+${o.rough || ''}`)   // A-03 step 3: per-pixel roughness hook (fish scale glints)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += diffuseColor.rgb * caustics(vWPos, normalize(vWNrm)) * ${(o.caustic ?? 1.0).toFixed(3)} * uCausCol;
+        totalEmissiveRadiance += diffuseColor.rgb * caustics(vWPos, normalize(vWNrm)) * ${(o.caustic ?? 1.0).toFixed(3)} * uCausCol * causFade(vWPos);
         ${o.emis || ''}`)
-      .replace('#include <fog_fragment>', 'gl_FragColor.rgb = waterApply(gl_FragColor.rgb, vWPos);');
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  gl_FragColor.rgb = waterLinear(gl_FragColor.rgb, vWPos);');   // A-03: linear light, before tone mapping
     if (o.near) fs = fs.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n if (length(vViewPosition) < ' + o.near.toFixed(2) + ') discard;');
     if (o.bump) fs = fs.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       { // procedural bump via screen-space derivatives (no textures)

@@ -98,12 +98,13 @@ function fishMaterial(key, pattern, dims, eyes = 1.0) {
     key: 'fish_' + key, uniforms, caustic: 0.45, near: 0.35,
     vHead: FISH_VERT_HEAD, vert: FISH_VERT, fHead: FISH_FRAG_HEAD + '\nvarying float vIrid;\n#define EYES ' + eyes.toFixed(2),
     color: `
-      vec3 col = vec3(1.0); float irid = 0.0; float yN = vLp.y / (0.5 * uH);
+      vec3 col = vec3(1.0); float irid = 0.0; float yN = vLp.y / (0.5 * uH); float fScale = 0.0;
       ${pattern}
       if (vFin < 0.5) {   // overlapping scales + countershading
         vec2 sp = vec2(vLp.z, vLp.y) / uLen * 30.0; sp.y += 0.5 * mod(floor(sp.x), 2.0);
         vec2 cc = fract(sp) - 0.5; float sc = smoothstep(0.55, 0.12, length(cc - vec2(0.2, 0.0)));
-        col *= (0.88 + 0.14 * sc) * mix(1.12, 0.92, smoothstep(-1.0, 1.0, yN));
+        fScale = sc;   // A-03 step 3: scale centres, reused for roughness and sheen
+        col *= (0.88 + 0.14 * sc) * mix(1.16, 0.84, smoothstep(-1.0, 1.0, yN));   // A-03 step 3: stronger countershading (pale belly, darker back)
       } else {            // fin rays
         col *= 0.8 + 0.2 * sin((vLp.y * 1.3 + vLp.z * 0.4) / uLen * 90.0);
       }
@@ -114,11 +115,18 @@ function fishMaterial(key, pattern, dims, eyes = 1.0) {
       diffuseColor.rgb = col;
       float fIrid = irid;
     `,
+    rough: `
+      roughnessFactor = vFin > 0.5 ? 0.42 : mix(0.40, 0.17, fScale);   // A-03 step 3: glossy scale centres catch sun glints
+    `,
     emis: `
       { vec3 vd = normalize(vViewPosition); float fr = 1.0 - abs(dot(normal, vd));
-        vec3 ir = 0.5 + 0.5 * cos(6.2831 * (fr * 1.4 + vec3(0.0, 0.33, 0.67) + vLp.z * 0.5));
-        totalEmissiveRadiance += ir * fIrid * (0.25 + 0.9 * fr * fr) * 0.5;
-        totalEmissiveRadiance += diffuseColor.rgb * (vFin > 0.5 ? 0.25 : 0.06);
+        // A-03 step 3: guanine sheen - less rainbow, more silver; strongest at grazing angles and on scale centres
+        vec3 ir = mix(vec3(0.85, 0.92, 1.0), 0.5 + 0.5 * cos(6.2831 * (fr * 1.4 + vec3(0.0, 0.33, 0.67) + vLp.z * 0.5)), 0.65);
+        totalEmissiveRadiance += ir * fIrid * (0.25 + 0.9 * fr * fr) * (0.75 + 0.5 * fScale) * 0.5;
+        // A-03 step 3: thin fins transmit the refracted sun (back-lit glow, dims with the light colour at night)
+        vec3 Vw = normalize(cameraPosition - vWPos), Sw = causSun(), Nw = normalize(vWNrm); Nw = dot(Nw, Vw) < 0.0 ? -Nw : Nw;
+        float tr = 0.6 * max(dot(-Nw, Sw), 0.0) + 0.4 * pow(max(dot(-Vw, Sw), 0.0), 3.0);
+        totalEmissiveRadiance += diffuseColor.rgb * (vFin > 0.5 ? 0.15 + 0.55 * tr * uCausCol : vec3(0.06));
         totalEmissiveRadiance += mix(vec3(0.15, 0.4, 0.55), vec3(0.25, 0.55, 1.0), uNight) * fr * fr * fr * (0.35 + 0.4 * uNight); }
     `
   });

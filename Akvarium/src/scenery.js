@@ -3,6 +3,8 @@
  * актинии, горгонария, поверхность воды с рябью, лучи света, морской снег и планктон.
  * Тело — строки 325–914 модуля однофайловой Aquarium.html (D-13), перенесены дословно; швы — tests/split.test.js.
  * Шов: seed = N → reseed(N) (общий поток ГПСЧ с основой и рыбами).
+ * A-03, шаг 2: лучи света связаны с мутностью — ярче там, где есть чему рассеивать свет, и гаснут с глубиной в мутной воде;
+ * при мутности по умолчанию — как раньше.
  */
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -112,7 +114,7 @@ function sandH(x, z) {
   }
   const tex = new THREE.DataTexture(data, S, S); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(14, 7);
   tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true; tex.needsUpdate = true;
-  const m = patch(new THREE.MeshStandardMaterial({ vertexColors: true, map: tex, roughness: 1.0, metalness: 0 }), { key: 'sand', caustic: 2.2 });
+  const m = patch(new THREE.MeshStandardMaterial({ vertexColors: true, map: tex, roughness: 1.0, metalness: 0 }), { key: 'sand', caustic: 2.2, bump: 0.05, bumpFreq: '7.0' });
   scene.add(new THREE.Mesh(g, m));
 }
 
@@ -541,14 +543,17 @@ function ripple(x, z, amp = 0.06) { U.uRip.value[ripIdx].set(x, z, U.uTime.value
     uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: `varying vec3 vN; varying vec3 vP; varying float vH; attribute float aSeed; varying float vS;
       void main(){ vH = uv.y; vS = aSeed; vec4 w = modelMatrix * vec4(position, 1.0); vP = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform float uTime; uniform vec3 uRayC; uniform float uTurb; varying vec3 vN; varying vec3 vP; varying float vH; varying float vS;
+    fragmentShader: `uniform float uTime; uniform vec3 uRayC; uniform float uTurb; uniform vec3 uBoxMax; varying vec3 vN; varying vec3 vP; varying float vH; varying float vS;
       void main(){
         vec3 v = normalize(cameraPosition - vP);
         float edge = pow(abs(dot(v, vN)), 2.5);
         float fade = smoothstep(0.0, 0.7, vH) * smoothstep(1.0, 0.92, vH);
         float fl = 0.55 + 0.45 * sin(uTime * 0.35 + vS * 6.0) * sin(uTime * 0.21 + vS * 3.0 + vP.y * 0.3);
         float streak = 0.6 + 0.4 * sin(atan(vN.z, vN.x) * 9.0 + vS * 10.0 + uTime * 0.1);
-        float a = edge * fade * fl * streak * 0.085 * (0.55 + 0.45 * uTurb);
+        // A-03 step 2: shafts need particles to scatter (more with turbidity, saturating), and turbid water attenuates the beam with depth.
+        // Relative to the default turbidity uTurb = 1, so the default look is unchanged; 0.447 = AQ_SCAT, 0.19 = AQ_M (core.js).
+        float z = max(uBoxMax.y - vP.y, 0.0), tk = uTurb / (0.6 + 0.4 * uTurb) * exp(-1.5 * 0.447 * 0.19 * (uTurb - 1.0) * z);
+        float a = edge * fade * fl * streak * 0.085 * tk;
         gl_FragColor = vec4(uRayC * a, 1.0);
       }`
   });
