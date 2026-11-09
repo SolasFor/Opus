@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');   // checkout с autocrlf
 export const INDEX = read('../index.html');
 export const CSS = read('../styles/app.css');
-export const ORDER = ['core', 'scenery', 'creatures', 'adapt', 'sim/hunger', 'ui/strings.ru', 'ui/gestures', 'ui/sheet', 'main'];   // порядок выполнения: main.js импортирует остальные по порядку (с A-02 — и модули ui/)
+export const ORDER = ['core', 'scenery', 'creatures', 'adapt', 'config/ecosystem', 'sim/hunger', 'sim/rest', 'ui/strings.ru', 'ui/gestures', 'ui/sheet', 'main'];   // порядок выполнения: main.js импортирует остальные по порядку (с A-02 — и модули ui/)
 export const MODULES = Object.fromEntries(ORDER.map(n => [n, read(`../src/${n}.js`)]));
 export const MAIN = MODULES.main;
 export const CODE = ORDER.map(n => MODULES[n]).join('');

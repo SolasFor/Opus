@@ -6,7 +6,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HUNGER, hungerInit, hungerCopy, hungerStep, hungerBite, foodInterest, foodReach, foodBoost } from '../src/sim/hunger.js';
+import { HUNGER } from '../src/config/ecosystem.js';
+import { hungerInit, hungerCopy, hungerStep, hungerBite, foodInterest, foodReach, foodBoost } from '../src/sim/hunger.js';
 
 // ГПСЧ Park–Miller (как у аквариума): один seed — одна последовательность
 const rng = seed => { let s = seed; return () => (s = s * 16807 % 2147483647, (s - 1) / 2147483646); };

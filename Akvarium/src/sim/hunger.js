@@ -7,16 +7,9 @@
  * к нему; при h = 1 оба равны прежним значениям, поэтому голодные рыбы ведут себя как до A-04.
  * Это стилизация, а не физиология: смерти от голода нет, числа подобраны так, чтобы кормление имело видимый конец.
  * Шаг без выделения памяти: функции меняют поля переданной рыбы и возвращают её же.
+ * Параметры HUNGER — в config/ecosystem.js (A-04, шаг 2), рядом с параметрами ночного отдыха.
  */
-const HUNGER = Object.freeze({
-  rate: 1 / 120,      // рост голода, 1/с: от сытости до полного голода за 2 мин
-  bite: 0.15,         // голод, который снимает один укус
-  sated: 0.2,         // ниже — рыба сыта и не замечает корм
-  resume: 0.35,       // выше — снова замечает (гистерезис)
-  start: [0.5, 0.9],  // начальный голод, U(a, b) из детерминированного ГПСЧ
-  reachMin: 0.5,      // доля радиуса поиска корма у почти сытой рыбы
-  boostMin: 0.4,      // доля прибавки скорости к корму у почти сытой рыбы
-});
+import { HUNGER } from '../config/ecosystem.js';
 
 function hungerInit(f, rnd) {
   const a = HUNGER.start[0], b = HUNGER.start[1];
@@ -64,4 +57,4 @@ function foodBoost(f, b) {
   return 1 + (b - 1) * (HUNGER.boostMin + (1 - HUNGER.boostMin) * foodInterest(f));
 }
 
-export { HUNGER, hungerInit, hungerCopy, hungerStep, hungerBite, foodInterest, foodReach, foodBoost };
+export { hungerInit, hungerCopy, hungerStep, hungerBite, foodInterest, foodReach, foodBoost };
