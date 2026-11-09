@@ -8,7 +8,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { D, fbm, HS, HT, patch, reseed, rnd, rr, scene, smooth, SUN, U, vnoise, W, WATER_GLSL } from './core.js';
+import { D, fbm, HS, HT, patch, reseed, rnd, rr, scene, smooth, SUN, U, vnoise, W, WATER_GLSL, WATER_T } from './core.js';
 
 // ------------------------------------------------------------------ tank shell: backdrop walls, stand, frame, glass
 const lampMat = new THREE.MeshBasicMaterial({ color: 0xdff6ff });
@@ -518,7 +518,7 @@ float ripH(vec2 p){
           col = mix(sky, refl, tir);
           float sp = causticT(vP.xz * 0.12, uTime * 0.6);
           col += uSky * vec3(0.8, 0.95, 1.0) * sp * 0.8 + uSky * rip * 0.9;
-          col = waterApply(col, vP);
+          col = waterLinear(col, vP);   // A-03d: the same linear water as the patched surfaces (was waterApply)
           a = 0.92;
         } else {
           float f = 0.02 + 0.98 * pow(1.0 - max(dot(v, n), 0.0), 5.0);
@@ -541,9 +541,9 @@ function ripple(x, z, amp = 0.06) { U.uRip.value[ripIdx].set(x, z, U.uTime.value
 {
   const mat = new THREE.ShaderMaterial({
     uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    vertexShader: `varying vec3 vN; varying vec3 vP; varying float vH; attribute float aSeed; varying float vS;
-      void main(){ vH = uv.y; vS = aSeed; vec4 w = modelMatrix * vec4(position, 1.0); vP = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform float uTime; uniform vec3 uRayC; uniform float uTurb; uniform vec3 uBoxMax; varying vec3 vN; varying vec3 vP; varying float vH; varying float vS;
+    vertexShader: `uniform vec3 uBoxMin; uniform vec3 uBoxMax; uniform float uTurb; varying vec3 vT;${WATER_T}varying vec3 vN; varying vec3 vP; varying float vH; attribute float aSeed; varying float vS;
+      void main(){ vH = uv.y; vS = aSeed; vec4 w = modelMatrix * vec4(position, 1.0); vP = w.xyz; vT = aqTrans(w.xyz, uBoxMin, uBoxMax, uTurb, 1.0); vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float uTime; uniform vec3 uRayC; uniform float uTurb; uniform vec3 uBoxMax; varying vec3 vN; varying vec3 vP; varying float vH; varying float vS; varying vec3 vT;
       void main(){
         vec3 v = normalize(cameraPosition - vP);
         float edge = pow(abs(dot(v, vN)), 2.5);
@@ -554,7 +554,7 @@ function ripple(x, z, amp = 0.06) { U.uRip.value[ripIdx].set(x, z, U.uTime.value
         // Relative to the default turbidity uTurb = 1, so the default look is unchanged; 0.447 = AQ_SCAT, 0.19 = AQ_M (core.js).
         float z = max(uBoxMax.y - vP.y, 0.0), tk = uTurb / (0.6 + 0.4 * uTurb) * exp(-1.5 * 0.447 * 0.19 * (uTurb - 1.0) * z);
         float a = edge * fade * fl * streak * 0.085 * tk;
-        gl_FragColor = vec4(uRayC * a, 1.0);
+        gl_FragColor = vec4(uRayC * a * vT, 1.0);   // A-03d: the shaft light reaches the eye through the water (WATER_T)
       }`
   });
   const geos = []; reseed(4242);
@@ -579,7 +579,7 @@ function ripple(x, z, amp = 0.06) { U.uRip.value[ripIdx].set(x, z, U.uTime.value
   const mat = new THREE.ShaderMaterial({
     uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: `uniform float uTime; uniform float uPR; uniform vec3 uBoxMin; uniform vec3 uBoxMax; uniform vec2 uDrift; uniform float uNight; uniform float uTurb;
-      attribute float aSize; varying float vA; varying float vGlow;
+      attribute float aSize; varying float vA; varying float vGlow; varying vec3 vT; varying vec3 vTg;${WATER_T}
       void main(){
         vec3 p = position;
         float s = p.x * 3.1 + p.z * 1.7 + p.y;
@@ -595,10 +595,11 @@ function ripple(x, z, amp = 0.06) { U.uRip.value[ripIdx].set(x, z, U.uTime.value
         gl_PointSize = min(aSize * uPR * 34.0 / -mv.z * (1.0 + vGlow * 0.6), 14.0 * uPR);
         vA = (0.25 + 0.35 * smoothstep(2.0, 8.0, p.y)) * smoothstep(40.0, 12.0, -mv.z) * (1.0 - 0.6 * uNight) * (0.55 + 0.45 * uTurb) * smoothstep(0.4, 2.0, -mv.z);
         vGlow *= smoothstep(0.4, 2.0, -mv.z);
+        vT = aqTrans(p, uBoxMin, uBoxMax, uTurb, 1.0); vTg = aqTrans(p, uBoxMin, uBoxMax, uTurb, 0.0);   // A-03d: snow is lit from above, plankton glows itself
       }`,
-    fragmentShader: `varying float vA; varying float vGlow; void main(){ vec2 c = gl_PointCoord - 0.5; float d = dot(c, c);
+    fragmentShader: `varying float vA; varying float vGlow; varying vec3 vT; varying vec3 vTg; void main(){ vec2 c = gl_PointCoord - 0.5; float d = dot(c, c);
       float a = smoothstep(0.25, 0.0, d);
-      vec3 col = vec3(0.75, 0.9, 0.95) * a * vA + vec3(0.25, 1.0, 0.85) * a * a * vGlow * 0.9;
+      vec3 col = vec3(0.75, 0.9, 0.95) * a * vA * vT + vec3(0.25, 1.0, 0.85) * a * a * vGlow * 0.9 * vTg;
       gl_FragColor = vec4(col, 1.0); }`
   });
   const pts = new THREE.Points(g, mat); pts.frustumCulled = false; pts.renderOrder = 6; scene.add(pts);

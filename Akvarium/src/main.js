@@ -10,6 +10,7 @@
  * A-04: голод и сытость рыб — sim/hunger.js; здесь только связка.
  * A-04, шаг 2: ночной отдых и укрытия — sim/rest.js, параметры обеих моделей — config/ecosystem.js, подпись — ui/strings.ru.js.
  * A-05: MSAA и стартовое разрешение по бюджету пикселей — perf/quality.js; здесь связка и счётчики window.__aq.
+ * A-03d: кинематика плавания (хвост по числу Струхаля, грудные плавники, C-старт) — sim/swim.js; здесь только связка.
  */
 import * as THREE from 'three';
 import { startPR } from './perf/quality.js';
@@ -20,6 +21,7 @@ import { ADAPT, ADAPT0, adaptStep } from './adapt.js';
 import { REST } from './config/ecosystem.js';
 import { foodBoost, foodReach, hungerBite, hungerCopy, hungerInit, hungerStep, remainsAge, remainsCut, remainsGone, remainsScale } from './sim/hunger.js';
 import { homeSpread, restAttractor, restWeight, shelterSide, shelterTop, speedHi } from './sim/rest.js';
+import { SWIM0, swimStep } from './sim/swim.js';
 import { BEHAVIOR_NOTE, FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT } from './ui/strings.ru.js';
 import { KIND, createGestures } from './ui/gestures.js';
 import { initSheet, setStop, SHEET } from './ui/sheet.js';
@@ -130,9 +132,10 @@ function orient(sp, f, i, dt) {
   f.dir.lerp(V2, 1 - Math.exp(-dt * (sp.school ? 7 : 3.5))).normalize();
   const turn = old.cross(f.dir).y / Math.max(dt, 1e-3);
   f.bank += (clamp(-turn * 0.35, -0.6, 0.6) - f.bank) * (1 - Math.exp(-dt * 3));
-  const spd = f.v.length() / sp.speed[1];
-  f.phase += dt * sp.freq * (0.45 + 0.9 * spd + f.st);
-  sp.ph.array[i] = f.phase;
+  const swS = f.sw || (f.sw = SWIM0(f.phase, !!sp.pect));   // A-03d: tail beat (Strouhal), pectoral cruise, C-start - sim/swim.js
+  swimStep(swS, dt, f.v.length(), sp.speed[1] * SPDK, sp.geo.L * f.scale, sp.amp, f.st, !!sp.pect, f.v.x * f.dir.z - f.v.z * f.dir.x < 0 ? -1 : 1);
+  f.phase = swS.tail; sp.ph.array[i] = swS.tail;
+  const swA = sp.sw.array, swK = i * 4; swA[swK] = swS.fin; swA[swK + 1] = swS.w; swA[swK + 2] = swS.bend; swA[swK + 3] = swS.finA;
   V1.crossVectors(f.dir, UPV).normalize();
   const up = V2.copy(UPV).multiplyScalar(Math.cos(f.bank)).addScaledVector(V1, Math.sin(f.bank));
   MAT.lookAt(f.dir, ZERO, up);
@@ -789,7 +792,7 @@ function frame() {
   updateSchool(chromis, 0, dt, t);
   updateSchool(anthias, 1, dt, t);
   updateSolo(clowns, dt); updateSolo(tangs, dt); updateSolo(ytang, dt); updateSolo(idols, dt);
-  for (const sp of SPECIES) { sp.mesh.instanceMatrix.needsUpdate = true; sp.ph.needsUpdate = true; }
+  for (const sp of SPECIES) { sp.mesh.instanceMatrix.needsUpdate = true; sp.ph.needsUpdate = true; sp.sw.needsUpdate = true; }
   updateBubbles(dt);
   updateJellies(dt);
   updateCamera(rdt);
