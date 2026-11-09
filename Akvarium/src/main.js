@@ -10,6 +10,7 @@
  * A-04: голод и сытость рыб — sim/hunger.js; здесь только связка.
  * A-04, шаг 2: ночной отдых и укрытия — sim/rest.js, параметры обеих моделей — config/ecosystem.js, подпись — ui/strings.ru.js.
  * A-05: MSAA и стартовое разрешение по бюджету пикселей — perf/quality.js; здесь связка и счётчики window.__aq.
+ * A-05b (Р-A14): адаптация видит и долю долгих кадров за окно (бюджет p95 ≤ 25 мс), window.__aq.jank.
  */
 import * as THREE from 'three';
 import { startPR } from './perf/quality.js';
@@ -740,20 +741,21 @@ let fpsFrames = 0, fpsAcc = 0, booted = false;
 const NOADAPT = new URLSearchParams(location.search).has('noadapt');   // ?noadapt — разрешение не меняется (для сравнения кадров)
 // A-05: стартовое разрешение — по бюджету пикселей экрана (perf/quality.js), дальше его ведёт adaptStep; с ?noadapt — MAXPR, как раньше
 if (!NOADAPT) { const pr0 = startPR(MAXPR, innerWidth, innerHeight, MSAA); if (pr0 !== pixelRatio) { storePixelRatio(pr0); renderer.setPixelRatio(pixelRatio); U.uPR.value = pixelRatio; } }
-const AD = { s: { ...ADAPT0, pr: pixelRatio }, frames: 0, acc: 0, t0: 0 };
+const AD = { s: { ...ADAPT0, pr: pixelRatio }, frames: 0, acc: 0, t0: 0, long: 0 };
+// A-05b (Р-A14): кроме среднего кадра окна считаем долгие кадры (дольше ADAPT.LONG = 25 мс, бюджет p95); их доля за окно — jank
 function adaptFrame(rawDt) {
-  AD.frames++; AD.acc += rawDt;
+  AD.frames++; AD.acc += rawDt; if (rawDt > ADAPT.LONG) AD.long++;
   if (AD.acc <= ADAPT.WIN) return;
-  const ft = AD.acc / AD.frames;
+  const ft = AD.acc / AD.frames, jank = AD.long / AD.frames;
   if (!NOADAPT && performance.now() - AD.t0 > ADAPT.WARM * 1000) {
-    AD.s = adaptStep(AD.s, 1 / ft, MAXPR);
+    AD.s = adaptStep(AD.s, 1 / ft, MAXPR, jank);
     if (AD.s.pr !== pixelRatio) { storePixelRatio(AD.s.pr); renderer.setPixelRatio(pixelRatio); U.uPR.value = pixelRatio; }
   }
-  window.__aq = { ft, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, msaa: MSAA, programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
-  AD.frames = 0; AD.acc = 0;
+  window.__aq = { ft, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, msaa: MSAA, programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, jank };
+  AD.frames = 0; AD.acc = 0; AD.long = 0;
 }
 // окно измерения начинается заново после фоновой вкладки и паузы: долгий кадр после возврата — не «медленный»
-function adaptReset() { AD.frames = 0; AD.acc = 0; clock.getDelta(); }
+function adaptReset() { AD.frames = 0; AD.acc = 0; AD.long = 0; clock.getDelta(); }
 document.addEventListener('visibilitychange', adaptReset);
 const SHK = new THREE.Vector3();
 function frame() {
