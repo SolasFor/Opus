@@ -10,6 +10,7 @@
  * A-04: голод и сытость рыб — sim/hunger.js; здесь только связка.
  * A-04, шаг 2: ночной отдых и укрытия — sim/rest.js, параметры обеих моделей — config/ecosystem.js, подпись — ui/strings.ru.js.
  * A-05: MSAA и стартовое разрешение по бюджету пикселей — perf/quality.js; здесь связка и счётчики window.__aq.
+ * A-05b (Р-A14): адаптация видит и долю долгих кадров за окно (бюджет p95 ≤ 25 мс), window.__aq.jank.
  */
 import * as THREE from 'three';
 import { startPR } from './perf/quality.js';
@@ -740,20 +741,21 @@ let fpsFrames = 0, fpsAcc = 0, booted = false;
 const NOADAPT = new URLSearchParams(location.search).has('noadapt');   // ?noadapt — разрешение не меняется (для сравнения кадров)
 // A-05: стартовое разрешение — по бюджету пикселей экрана (perf/quality.js), дальше его ведёт adaptStep; с ?noadapt — MAXPR, как раньше
 if (!NOADAPT) { const pr0 = startPR(MAXPR, innerWidth, innerHeight, MSAA); if (pr0 !== pixelRatio) { storePixelRatio(pr0); renderer.setPixelRatio(pixelRatio); U.uPR.value = pixelRatio; } }
-const AD = { s: { ...ADAPT0, pr: pixelRatio }, frames: 0, acc: 0, t0: 0 };
+const AD = { s: { ...ADAPT0, pr: pixelRatio }, frames: 0, acc: 0, t0: 0, long: 0 };
+// A-05b (Р-A14): кроме среднего кадра окна считаем долгие кадры (дольше ADAPT.LONG = 25 мс, бюджет p95); их доля за окно — jank
 function adaptFrame(rawDt) {
-  AD.frames++; AD.acc += rawDt;
+  AD.frames++; AD.acc += rawDt; if (rawDt > ADAPT.LONG) AD.long++;
   if (AD.acc <= ADAPT.WIN) return;
-  const ft = AD.acc / AD.frames;
+  const ft = AD.acc / AD.frames, jank = AD.long / AD.frames;
   if (!NOADAPT && performance.now() - AD.t0 > ADAPT.WARM * 1000) {
-    AD.s = adaptStep(AD.s, 1 / ft, MAXPR);
+    AD.s = adaptStep(AD.s, 1 / ft, MAXPR, jank);
     if (AD.s.pr !== pixelRatio) { storePixelRatio(AD.s.pr); renderer.setPixelRatio(pixelRatio); U.uPR.value = pixelRatio; }
   }
-  window.__aq = { ft, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, msaa: MSAA, programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
-  AD.frames = 0; AD.acc = 0;
+  window.__aq = { ft, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, msaa: MSAA, programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, jank };
+  AD.frames = 0; AD.acc = 0; AD.long = 0;
 }
 // окно измерения начинается заново после фоновой вкладки и паузы: долгий кадр после возврата — не «медленный»
-function adaptReset() { AD.frames = 0; AD.acc = 0; clock.getDelta(); }
+function adaptReset() { AD.frames = 0; AD.acc = 0; AD.long = 0; clock.getDelta(); }
 document.addEventListener('visibilitychange', adaptReset);
 const SHK = new THREE.Vector3();
 function frame() {
@@ -773,93 +775,4 @@ function frame() {
   const ca = (0.6 + 0.4 * Math.sin(t * 0.13)) * K.cur / 0.6;
   U.uCurrent.value.set(Math.cos(t * 0.05) * ca, Math.sin(t * 0.05) * 0.5 * ca);
   U.uDrift.value.addScaledVector(U.uCurrent.value, dt * 0.05);
-  ANEM_STARTLE.value = Math.max(0, ANEM_STARTLE.value - dt * 0.35);
-  // cursor ray (flee + torch)
-  mouse.active = mouse.in && introT >= 1;
-  if (mouse.in) {
-    setRay(mouse.ndc.x, mouse.ndc.y, mouse.ray);
-    if (GS.hold(performance.now())) { clearTimeout(clickTimer); clickTimer = 0; }
-    if (GS.holding()) { sprinkleT -= rdt; if (sprinkleT <= 0) { sprinkleT = 0.07; feedAt(mouse.ndc.x, mouse.ndc.y, 2, 0.35); } }
-  }
-  const torchOn = K.torch && mouse.active;
-  if (mouse.in) { cursorPoint(mouse.ndc.x, mouse.ndc.y, V4); V4.addScaledVector(mouse.ray.direction, -1.6); V4.x = clamp(V4.x, -W / 2, W / 2); V4.y = clamp(V4.y, 0.5, HS); V4.z = clamp(V4.z, -D / 2, D / 2 + 1); torch.position.lerp(V4, 1 - Math.exp(-rdt * 12)); }
-  torch.intensity += ((torchOn ? 5 + 16 * K.night : 0) - torch.intensity) * (1 - Math.exp(-rdt * 8));
-
-  updateFood(dt);
-  updateSchool(chromis, 0, dt, t);
-  updateSchool(anthias, 1, dt, t);
-  updateSolo(clowns, dt); updateSolo(tangs, dt); updateSolo(ytang, dt); updateSolo(idols, dt);
-  for (const sp of SPECIES) { sp.mesh.instanceMatrix.needsUpdate = true; sp.ph.needsUpdate = true; }
-  updateBubbles(dt);
-  updateJellies(dt);
-  updateCamera(rdt);
-  if (controls.enabled && !K.follow && camReturn === 0) controls.update();
-  updateTooltip();
-  // shift the projection centre left while the panel is open, so the panel never covers the tank
-  const offT = (!SHEET.on && !panel.classList.contains('hid') && innerWidth > 860) ? Math.min(120, innerWidth * 0.075) : 0;
-  const offY = SHEET.on ? Math.min(SHEET.h, innerHeight * 0.5) / 2 : 0;
-  if (Math.abs(offT - viewOff) + Math.abs(offY - viewOffY) > 0.3) {
-    const a = RM.matches ? 1 : 1 - Math.exp(-rdt * 5);
-    viewOff += (offT - viewOff) * a; viewOffY += (offY - viewOffY) * a; applyViewOffset();
-  }
-  if (K.sound && ambGain && K.air && Math.random() < rdt * 2.5) sfxPlopMaybe();
-  // knock shake (applied only for this render)
-  if (shake > 0.001) { shake *= Math.exp(-rdt * 7); SHK.set(Math.sin(rt * 90) * 0.05, Math.cos(rt * 77) * 0.035, 0).multiplyScalar(shake); camera.position.add(SHK); }
-  renderer.render(scene, camera);
-  if (shake > 0.001) camera.position.sub(SHK);
-  if (!booted) { booted = true; window.__ok = 1; AD.t0 = performance.now(); window.__aqScreen('ready'); }
-  // fps counter + adaptive resolution
-  fpsFrames++; fpsAcc += rawDt;
-  if (fpsAcc > 0.5) { if (DEBUG) fpsEl.textContent = Math.round(fpsFrames / fpsAcc) + ' fps'; fpsFrames = 0; fpsAcc = 0; }
-  adaptFrame(rawDt);
-}
-// A-01: цикл кадров. Пока WebGL-контекст потерян — пауза (симуляция стоит); ошибку кадра сообщаем в консоль один раз,
-// если она повторяется 30 кадров подряд — цикл останавливается с сообщением (раньше первая же ошибка молча останавливала цикл)
-const run = { lost: false, stopped: false, errors: 0, timer: 0 };
-function loop() {
-  if (run.stopped) return;
-  if (run.lost) { clock.getDelta(); return; }
-  try {
-    frame();
-    run.errors = 0;
-  } catch (err) {
-    if (++run.errors === 1) console.error(err);
-    if (run.errors >= 30) {
-      run.stopped = true; renderer.setAnimationLoop(null); clearTimeout(run.timer); window.__aqFailed = true;
-      window.__aqScreen('failed', '<b>Аквариум остановлен из-за ошибки.</b><br><span class="why">' +
-        window.__aqEsc(err && err.message ? err.message : err) + '<br>Перезагрузите страницу.</span>', ['reload']);
-    }
-  }
-}
-// A-01: потеря и восстановление WebGL-контекста. Обработчики three.js стоят раньше (preventDefault — контекст можно вернуть);
-// после restore three.js сам заново загружает геометрии, материалы и canvas-текстуры, окружение (PMREM) строим заново
-renderer.domElement.addEventListener('webglcontextlost', () => {
-  if (run.stopped) return;                  // после остановки сообщение об ошибке остаётся на экране
-  run.lost = true;
-  window.__aqScreen('lost', 'Графика временно недоступна: браузер сбросил WebGL-контекст. Восстанавливаю…');
-  clearTimeout(run.timer);
-  run.timer = setTimeout(() => window.__aqScreen('failed', '<b>Не удалось восстановить графику.</b><br><span class="why">' +
-    'Браузер не вернул WebGL-контекст. Перезагрузите страницу.</span>', ['reload']), 10000);
-});
-renderer.domElement.addEventListener('webglcontextrestored', () => {
-  if (run.stopped) return;
-  clearTimeout(run.timer);
-  storeEnv(makeEnv());                          // старая текстура осталась в потерянном контексте
-  for (const m of FISH_MATS) m.envMap = ENV;
-  run.lost = false; adaptReset();
-  window.__aqScreen(booted ? 'ready' : 'booting');
-});
-// A-04: initial hunger from a separate generator, so the scene seed sequence stays unchanged
-{ let s = 4204; const hr = () => (s = s * 16807 % 2147483647) / 2147483647; for (const sp of SPECIES) for (const f of sp.fish) hungerInit(f, hr); }
-// warm the simulation so fish start in natural formations
-for (let i = 0; i < 90; i++) { t += 1 / 30; U.uTime.value = t; updateSchool(chromis, 0, 1 / 30, t); updateSchool(anthias, 1, 1 / 30, t); updateSolo(clowns, 1 / 30); updateSolo(tangs, 1 / 30); updateSolo(ytang, 1 / 30); updateSolo(idols, 1 / 30); }
-renderer.setAnimationLoop(loop);
-
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight; fitFov(); applyViewOffset();
-  renderer.setSize(innerWidth, innerHeight);
-});
-// debug / test hooks. A-01 (T-11): setPopulation из API двигает и слайдер «Рыбы»; доля ограничена диапазоном слайдера
-// (больше 1 — рыб не хватает в массиве стаи)
-function apiSetPopulation(p) { setPopulation(clamp(+p || 0, 0.05, 1)); syncSliders(); }
-window.__aqAPI = { skipIntro() { introT = 0.999; }, get introT() { return introT; }, K, setPreset, setToggle, setPopulation: apiSetPopulation, dropFood, feedAt, knockAt, pickAt, startFollow, stopFollow, screenshot, togglePause, togglePanel, SPECIES, camera, controls, get fol() { return fol; }, get foodAlive() { return foodAlive; } };
+  ANEM_STARTLE.value = Math.max(0,
