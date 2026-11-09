@@ -18,7 +18,7 @@ import { AERATOR, ANEM_STARTLE, ANEMONES, lampMat, ripple, sandH } from './scene
 import { anthias, bub, BUB_N, bubbles, chromis, clowns, ENV, FISH_MATS, idols, jellies, makeEnv, SPECIES, storeEnv, tangs, ytang } from './creatures.js';
 import { ADAPT, ADAPT0, adaptStep } from './adapt.js';
 import { REST } from './config/ecosystem.js';
-import { foodBoost, foodReach, hungerBite, hungerCopy, hungerInit, hungerStep } from './sim/hunger.js';
+import { foodBoost, foodReach, hungerBite, hungerCopy, hungerInit, hungerStep, remainsAge, remainsCut, remainsGone, remainsScale } from './sim/hunger.js';
 import { homeSpread, restAttractor, restWeight, shelterSide, shelterTop, speedHi } from './sim/rest.js';
 import { BEHAVIOR_NOTE, FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT } from './ui/strings.ru.js';
 import { KIND, createGestures } from './ui/gestures.js';
@@ -38,7 +38,8 @@ const foodPts = new THREE.Points(foodG, new THREE.ShaderMaterial({
 foodPts.frustumCulled = false; scene.add(foodPts);
 const food = [];
 for (let i = 0; i < FOOD_N; i++) food.push({ p: new THREE.Vector3(0, -999, 0), alive: false, t: 0, ph: rnd() * 6.28, hp: 0, ground: 0, rippled: false });
-let foodCursor = 0, foodAlive = 0;
+let foodCursor = 0, foodAlive = 0, foodGround = 0;
+const groundAges = new Float32Array(FOOD_N);   // A-04 step 3: ages of flakes lying on the sand, refilled every frame
 function dropFood(x, z, n = 12, spread = 0.6) {
   x = clamp(x, -W / 2 + 0.5, W / 2 - 0.5); z = clamp(z, -D / 2 + 0.5, D / 2 - 0.5);
   for (let i = 0; i < n; i++) {
@@ -387,7 +388,8 @@ function updateJellies(dt) {
   }
 }
 function updateFood(dt) {
-  let n = 0;
+  const cut = remainsCut(groundAges, foodGround);   // A-04 step 3: over REMAINS.cap the oldest leftovers dissolve faster
+  let n = 0, gn = 0;
   for (let i = 0; i < FOOD_N; i++) {
     const f = food[i];
     if (f.alive) {
@@ -399,13 +401,13 @@ function updateFood(dt) {
         f.p.x += (Math.sin(t * 1.5 + f.ph) * 0.12 + U.uCurrent.value.x * 0.12) * dt; f.p.z += (Math.cos(t * 1.2 + f.ph) * 0.1 + U.uCurrent.value.y * 0.12) * dt;
         f.p.x = clamp(f.p.x, -W / 2 + 0.2, W / 2 - 0.2); f.p.z = clamp(f.p.z, -D / 2 + 0.2, D / 2 - 0.2);
         if (f.p.y < g) f.p.y = g;
-      } else { f.ground += dt; if (f.ground > 16) f.alive = false; }   // leftovers dissolve after a while
+      } else { f.ground = remainsAge(f.ground, dt, cut); if (remainsGone(f.ground)) f.alive = false; else groundAges[gn++] = f.ground; }   // leftovers dissolve after a while (A-04 step 3: capped)
     }
     if (f.alive) n++;
     foodArr[i * 3] = f.alive ? f.p.x : 0; foodArr[i * 3 + 1] = f.alive ? f.p.y : -999; foodArr[i * 3 + 2] = f.alive ? f.p.z : 0;
-    foodSz[i] = f.alive ? (0.55 + 0.15 * f.hp) * (f.ground > 13 ? (16 - f.ground) / 3 : 1) : 0;
+    foodSz[i] = f.alive ? (0.55 + 0.15 * f.hp) * remainsScale(f.ground) : 0;
   }
-  foodAlive = n;
+  foodAlive = n; foodGround = gn;
   foodG.attributes.position.needsUpdate = true; foodG.attributes.aSz.needsUpdate = true;
 }
 
