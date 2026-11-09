@@ -9,9 +9,11 @@
  * переключатель «Медузы», имена и состояния элементов для экранного диктора, правило Space/Enter, порядок Esc.
  * A-04: голод и сытость рыб — sim/hunger.js; здесь только связка.
  * A-04, шаг 2: ночной отдых и укрытия — sim/rest.js, параметры обеих моделей — config/ecosystem.js, подпись — ui/strings.ru.js.
+ * A-05: MSAA и стартовое разрешение по бюджету пикселей — perf/quality.js; здесь связка и счётчики window.__aq.
  */
 import * as THREE from 'three';
-import { applyLimits, CAM_HOME, camera, clamp, controls, D, fill, hemi, HS, HT, LIM, MAXPR, pixelRatio, renderer, rnd, rr, scene, smooth, storePixelRatio, sun, TGT_HOME, torch, U, W } from './core.js';
+import { startPR } from './perf/quality.js';
+import { applyLimits, CAM_HOME, camera, clamp, controls, D, fill, hemi, HS, HT, LIM, MAXPR, MSAA, pixelRatio, renderer, rnd, rr, scene, smooth, storePixelRatio, sun, TGT_HOME, torch, U, W } from './core.js';
 import { AERATOR, ANEM_STARTLE, ANEMONES, lampMat, ripple, sandH } from './scenery.js';
 import { anthias, bub, BUB_N, bubbles, chromis, clowns, ENV, FISH_MATS, idols, jellies, makeEnv, SPECIES, storeEnv, tangs, ytang } from './creatures.js';
 import { ADAPT, ADAPT0, adaptStep } from './adapt.js';
@@ -736,6 +738,8 @@ let fpsFrames = 0, fpsAcc = 0, booted = false;
 
 // A-01: адаптивное разрешение в обе стороны, с гистерезисом; решение — чистая функция adaptStep (adapt.js)
 const NOADAPT = new URLSearchParams(location.search).has('noadapt');   // ?noadapt — разрешение не меняется (для сравнения кадров)
+// A-05: стартовое разрешение — по бюджету пикселей экрана (perf/quality.js), дальше его ведёт adaptStep; с ?noadapt — MAXPR, как раньше
+if (!NOADAPT) { const pr0 = startPR(MAXPR, innerWidth, innerHeight, MSAA); if (pr0 !== pixelRatio) { storePixelRatio(pr0); renderer.setPixelRatio(pixelRatio); U.uPR.value = pixelRatio; } }
 const AD = { s: { ...ADAPT0, pr: pixelRatio }, frames: 0, acc: 0, t0: 0 };
 function adaptFrame(rawDt) {
   AD.frames++; AD.acc += rawDt;
@@ -745,7 +749,7 @@ function adaptFrame(rawDt) {
     AD.s = adaptStep(AD.s, 1 / ft, MAXPR);
     if (AD.s.pr !== pixelRatio) { storePixelRatio(AD.s.pr); renderer.setPixelRatio(pixelRatio); U.uPR.value = pixelRatio; }
   }
-  window.__aq = { ft, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
+  window.__aq = { ft, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, msaa: MSAA, programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
   AD.frames = 0; AD.acc = 0;
 }
 // окно измерения начинается заново после фоновой вкладки и паузы: долгий кадр после возврата — не «медленный»

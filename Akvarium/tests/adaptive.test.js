@@ -1,8 +1,8 @@
 /**
  * Адаптивное разрешение аквариума (A-01): чистая функция adaptStep из модульной версии Akvarium (index.html, styles/app.css, src/main.js).
  * Тест вырезает блок между метками «// @pure adaptStep begin» и «// @pure adaptStep end» и выполняет его в node:vm —
- * поэтому в блоке не должно быть DOM, three.js и состояния страницы. Прежнее поведение (только вниз: fps < 45 два окна
- * подряд — pixelRatio −0.25, не ниже 0.75) сохранено; новое — подъём обратно с гистерезисом. Плюс статические проверки
+ * поэтому в блоке не должно быть DOM, three.js и состояния страницы. Прежнее поведение (только вниз: fps < LOW два окна
+ * подряд — pixelRatio −0.25, не ниже 0.75) сохранено, порог LOW — 55 (Р-A13, A-05; было 45); новое — подъём обратно с гистерезисом. Плюс статические проверки
  * встраивания: ?noadapt, разогрев по реальному времени, сброс окна после фоновой вкладки, window.__aq.
  * Без сторонних зависимостей.
  */
@@ -25,12 +25,12 @@ function runSeq(fpsOf, windows, maxPR = 1.75, pr = maxPR) {
   }
   return { s, hist };
 }
-// прежний код (main@4b8d33a, конец frame()): slowCount++ при ft > 1/45 и pixelRatio > 0.75, иначе сброс
-function legacySeq(fpsOf, windows, pr = 1.75) {
+// прежний код (main@4b8d33a, конец frame()): slowCount++ при ft > 1/45 и pixelRatio > 0.75, иначе сброс; порог — параметр low (прежний — 45, сейчас ADAPT.LOW)
+function legacySeq(fpsOf, windows, pr = 1.75, low = 45) {
   let slow = 0; const hist = [];
   for (let i = 0; i < windows; i++) {
     const ft = 1 / fpsOf(pr, i);
-    if (ft > 1 / 45 && pr > 0.75) { slow++; if (slow >= 2) { pr = Math.max(0.75, pr - 0.25); slow = 0; } } else slow = 0;
+    if (ft > 1 / low && pr > 0.75) { slow++; if (slow >= 2) { pr = Math.max(0.75, pr - 0.25); slow = 0; } } else slow = 0;
     hist.push(pr);
   }
   return hist;
@@ -43,7 +43,7 @@ test('блок @pure найден, без DOM, three.js и состояния с
 });
 
 test('параметры', () => {
-  assert.deepEqual({ ...ADAPT }, { WIN: 2, WARM: 5, LOW: 45, HIGH: 58, STEP: 0.25, MIN: 0.75, SLOW: 2, HOLD: 3, HOLD_MAX: 24, TRIAL: 5 });
+  assert.deepEqual({ ...ADAPT }, { WIN: 2, WARM: 5, LOW: 55, HIGH: 58, STEP: 0.25, MIN: 0.75, SLOW: 2, HOLD: 3, HOLD_MAX: 24, TRIAL: 5 });
   assert.deepEqual({ ...ADAPT0 }, { pr: 1, slow: 0, good: 0, hold: 3, since: Infinity });
 });
 
@@ -55,13 +55,14 @@ test('вниз — как раньше: два медленных окна по�
 });
 
 test('совпадает с прежним кодом, пока подниматься некуда', () => {
-  for (const f of [() => 30, () => 50, (pr, i) => (i % 3 ? 30 : 50), (pr, i) => (i < 4 ? 20 : 47)]) {
-    assert.deepEqual(runSeq(f, 40).hist, legacySeq(f, 40));
+  for (const f of [() => 30, () => 50, () => 56, (pr, i) => (i % 3 ? 30 : 56), (pr, i) => (i < 4 ? 20 : 57)]) {
+    assert.deepEqual(runSeq(f, 40).hist, legacySeq(f, 40, 1.75, ADAPT.LOW));
   }
 });
 
-test('ровно на порогах: 45 — не медленно, 58 — ещё не быстро', () => {
-  assert.deepEqual(runSeq(45, 6).hist, Array(6).fill(1.75));
+test('ровно на порогах: 55 — не медленно, 54 — медленно, 58 — ещё не быстро (Р-A13)', () => {
+  assert.deepEqual(runSeq(55, 6).hist, Array(6).fill(1.75));
+  assert.deepEqual(runSeq(54, 4).hist, [1.75, 1.5, 1.5, 1.25]);
   assert.deepEqual(runSeq(58, 20, 1.75, 1).hist, Array(20).fill(1));
 });
 
@@ -70,8 +71,8 @@ test('вверх: HOLD быстрых окон подряд — +0.25, не вы
   assert.deepEqual(hist, [1, 1, 1.25, 1.25, 1.25, 1.5, 1.5, 1.5, 1.75, 1.75, 1.75, 1.75]);
   assert.deepEqual(runSeq(60, 6, 1, 1).hist, Array(6).fill(1));            // maxPR = 1 (экран 1×): выше не поднимаемся
   assert.equal(runSeq(60, 30, 1.6, 0.75).s.pr, 1.6);                       // maxPR не кратен шагу
-  // среднее окно (45…58) прерывает серию
-  assert.deepEqual(runSeq((pr, i) => (i === 1 ? 50 : 60), 5, 1.75, 1).hist, [1, 1, 1, 1, 1.25]);
+  // среднее окно (55…58) прерывает серию
+  assert.deepEqual(runSeq((pr, i) => (i === 1 ? 56 : 60), 5, 1.75, 1).hist, [1, 1, 1, 1, 1.25]);
 });
 
 test('гистерезис: неудачный подъём удваивает ожидание 3 → 6 → 12 → 24 окна (не больше)', () => {
@@ -98,9 +99,9 @@ test('удачный подъём (продержался TRIAL окон) воз
   for (let i = 0; i < 24; i++) s = adaptStep(s, 60, 1.75);
   assert.equal(s.pr, 1.25);
   assert.equal(s.since, 0);
-  for (let i = 0; i < ADAPT.TRIAL; i++) s = adaptStep(s, 50, 1.75);    // TRIAL окон без падения
+  for (let i = 0; i < ADAPT.TRIAL; i++) s = adaptStep(s, 56, 1.75);    // TRIAL окон без падения
   assert.equal(s.hold, 24);
-  s = adaptStep(s, 50, 1.75);
+  s = adaptStep(s, 56, 1.75);
   assert.equal(s.hold, ADAPT.HOLD);
   // а падение позже TRIAL окон не удваивает ожидание
   s = adaptStep(adaptStep(s, 30, 1.75), 30, 1.75);
@@ -135,7 +136,7 @@ test('встраивание: ?noadapt, разогрев по performance.now, �
   assert.match(fn, /if \(!NOADAPT && performance\.now\(\) - AD\.t0 > ADAPT\.WARM \* 1000\)/);
   assert.match(fn, /AD\.s = adaptStep\(AD\.s, 1 \/ ft, MAXPR\);/);
   assert.match(fn, /renderer\.setPixelRatio\(pixelRatio\); U\.uPR\.value = pixelRatio;/);
-  assert.match(fn, /window\.__aq = \{ ft, pixelRatio, calls: renderer\.info\.render\.calls, tris: renderer\.info\.render\.triangles \};/);
+  assert.match(fn, /window\.__aq = \{ ft, pixelRatio, calls: renderer\.info\.render\.calls, tris: renderer\.info\.render\.triangles, msaa: MSAA, programs: renderer\.info\.programs\.length, geometries: renderer\.info\.memory\.geometries, textures: renderer\.info\.memory\.textures \};/);
   assert.match(html, /function adaptReset\(\) \{ AD\.frames = 0; AD\.acc = 0; clock\.getDelta\(\); \}/);
   assert.match(html, /document\.addEventListener\('visibilitychange', adaptReset\);/);
   assert.match(html, /AD\.t0 = performance\.now\(\); window\.__aqScreen\('ready'\);/);

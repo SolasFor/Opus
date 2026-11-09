@@ -9,7 +9,8 @@
  * разрешение снова пришлось снизить, повышение не удалось, и следующего ждём вдвое дольше (3 → 6 → 12 → 24 окна, то есть 6 → 48 с).
  * Повышение, продержавшееся TRIAL окон, возвращает ожидание к HOLD. Измерения начинаются через WARM с после первого кадра.
  * s — состояние прошлого шага (в начале — ADAPT0 с pr), возвращается новое; s не меняется. */
-const ADAPT = { WIN: 2, WARM: 5, LOW: 45, HIGH: 58, STEP: 0.25, MIN: 0.75, SLOW: 2, HOLD: 3, HOLD_MAX: 24, TRIAL: 5 };
+// Р-A13 (A-05, утверждено 9 ноября 2026 г.): LOW 45 → 55 — разрешение снижается, когда кадр ниже бюджета iGPU (≥ 55 кадров/с).
+const ADAPT = { WIN: 2, WARM: 5, LOW: 55, HIGH: 58, STEP: 0.25, MIN: 0.75, SLOW: 2, HOLD: 3, HOLD_MAX: 24, TRIAL: 5 };
 const ADAPT0 = { pr: 1, slow: 0, good: 0, hold: ADAPT.HOLD, since: Infinity };
 function adaptStep(s, fps, maxPR) {
   let { pr, slow, good, hold, since } = s;
