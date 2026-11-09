@@ -24,6 +24,8 @@ const TOGGLES = [['air', 'Аэратор', ''], ['jelly', 'Медузы', ''], [
 // D-12: медузы-аурелии остаются художественным элементом — с этой подписью и переключателем «Медузы»
 const JELLY_NOTE = 'Художественный элемент: медуз-аурелий держат в отдельных круглых аквариумах, а не вместе с рифовыми рыбами.';
 const JELLY_TIP = 'Медуза-аурелия<i>Aurelia aurita · художественный элемент</i>';
+// A-04: подпись под ползунком «Рыбы» — голод, сытость и ночной отдых упрощены (ecosystem-models §6)
+const BEHAVIOR_NOTE = 'Стилизованное поведение: голод, сытость и ночной отдых рыб упрощены ради спокойной витрины — это не модель физиологии.';
 
 const PANEL_HTML = `<button type="button" id="grip" aria-controls="pbody" aria-expanded="false" aria-keyshortcuts="H"><span class="bar" aria-hidden="true"></span><span class="sr">Панель управления</span></button>
   <h3>Аквариум <span aria-hidden="true">H — скрыть</span></h3>
@@ -42,4 +44,4 @@ const S = {
   tipFollow: { mouse: ' · двойной клик — следить', touch: ' · двойное касание — следить' },
 };
 
-export { FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT, fishCount };
+export { BEHAVIOR_NOTE, FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT, fishCount };

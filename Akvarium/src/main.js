@@ -8,6 +8,7 @@
  * ui/strings.ru.js; здесь — весь аквариум в кадре на узком экране (camK), сдвиг кадра над шторкой, reduced motion,
  * переключатель «Медузы», имена и состояния элементов для экранного диктора, правило Space/Enter, порядок Esc.
  * A-04: голод и сытость рыб — sim/hunger.js; здесь только связка.
+ * A-04, шаг 2: ночной отдых и укрытия — sim/rest.js, параметры обеих моделей — config/ecosystem.js, подпись — ui/strings.ru.js.
  * A-05: MSAA и стартовое разрешение по бюджету пикселей — perf/quality.js; здесь связка и счётчики window.__aq.
  */
 import * as THREE from 'three';
@@ -16,8 +17,10 @@ import { applyLimits, CAM_HOME, camera, clamp, controls, D, fill, hemi, HS, HT, 
 import { AERATOR, ANEM_STARTLE, ANEMONES, lampMat, ripple, sandH } from './scenery.js';
 import { anthias, bub, BUB_N, bubbles, chromis, clowns, ENV, FISH_MATS, idols, jellies, makeEnv, SPECIES, storeEnv, tangs, ytang } from './creatures.js';
 import { ADAPT, ADAPT0, adaptStep } from './adapt.js';
+import { REST } from './config/ecosystem.js';
 import { foodBoost, foodReach, hungerBite, hungerCopy, hungerInit, hungerStep } from './sim/hunger.js';
-import { FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT } from './ui/strings.ru.js';
+import { homeSpread, restAttractor, restWeight, shelterSide, shelterTop, speedHi } from './sim/rest.js';
+import { BEHAVIOR_NOTE, FMT, JELLY_NOTE, JELLY_TIP, PANEL_HTML, S, SLIDERS, TOGGLES, VALUETEXT } from './ui/strings.ru.js';
 import { KIND, createGestures } from './ui/gestures.js';
 import { initSheet, setStop, SHEET } from './ui/sheet.js';
 
@@ -63,6 +66,9 @@ const BIGS = [...tangs.fish, ...ytang.fish, ...idols.fish];
 const ANEM0 = ANEMONES[0], HIDE_P = new THREE.Vector3(ANEM0.x, ANEM0.y + 0.42, ANEM0.z);
 const mouse = { in: false, ndc: new THREE.Vector2(), x: 0, y: 0, ray: new THREE.Ray(), active: false };
 let SPDK = 1;   // global speed factor (fish are lazier at night)
+let RW = 0;     // A-04: вес ночного отдыха 0…1 (sim/rest.js); днём и на закате 0 — поведение прежнее
+const SHELTER = REST.school.map(j => shelterTop(OBST[j], new THREE.Vector3()));   // укрытия стай над рифом (индекс k в updateSchool)
+const SOLO_ROCK = new Map([[tangs, REST.solo.tang], [ytang, REST.solo.ytang], [idols, REST.solo.idol]]);   // камни одиночных рыб
 
 function envForce(f, margin, out, strength, low) {
   const p = f.p;
@@ -111,7 +117,7 @@ function bite(f, fd, reach) {
 function integrate(sp, f, dt, maxF, slow) {
   ACC.clampLength(0, maxF * (1 + f.st * 2));
   f.v.addScaledVector(ACC, dt);
-  const sp2 = f.v.length(), boost = f.boost * (1 + f.st * 1.6), hi = sp.speed[1] * boost * SPDK, lo = sp.speed[0] * SPDK * (slow ? 0.3 : 1);
+  const sp2 = f.v.length(), boost = f.boost * (1 + f.st * 1.6), hi = speedHi(sp.speed[0], sp.speed[1], RW) * boost * SPDK, lo = sp.speed[0] * SPDK * (slow ? 0.3 : 1);
   if (sp2 > hi) f.v.multiplyScalar(hi / sp2);
   if (sp2 < lo) f.v.multiplyScalar(lo / Math.max(sp2, 1e-4));
   const lim = f.v.length() * (slow ? 0.9 : 0.45); f.v.y = clamp(f.v.y, -lim, lim);
@@ -139,6 +145,7 @@ function attractor(k, t, out) {
 function updateSchool(sp, k, dt, t) {
   const F = sp.fish, n = sp.count;
   attractor(k, t, ATT);
+  if (RW > 0) restAttractor(ATT, SHELTER[k], RW, ATT);   // A-04: ночью стая стягивается к укрытию над рифом
   const R2 = 1.1 * 1.1, S2 = 0.32 * 0.32;
   for (let i = 0; i < n; i++) {
     const f = F[i]; ACC.set(0, 0, 0); hungerStep(f, dt);
@@ -167,7 +174,9 @@ function updateSchool(sp, k, dt, t) {
   }
 }
 function pickTarget(sp, f) {
-  if (sp.home) { f.target.set(sp.home.x + rr(-0.9, 0.9), sp.home.y + rr(-0.4, 0.6) - K.night * 0.35, sp.home.z + rr(-0.9, 0.9)); return; }
+  if (sp.home) { const s = homeSpread(RW); f.target.set(sp.home.x + rr(-0.9, 0.9) * s, sp.home.y + rr(-0.4, 0.6) - K.night * 0.35, sp.home.z + rr(-0.9, 0.9) * s); return; }
+  const rocks = SOLO_ROCK.get(sp);   // A-04: ночью с вероятностью RW — точка у бока камня; днём rnd() здесь не вызывается
+  if (rocks && RW > 0 && rnd() < RW) { shelterSide(OBST[rocks[sp.fish.indexOf(f) % rocks.length]], rr(REST.side[0], REST.side[1]), f.target); return; }
   for (let tries = 0; tries < 12; tries++) {
     f.target.set(rr(-6.2, 6.2), rr(1.8, 7.0 - K.night * 2), rr(-2.0, 2.6));
     if (f.target.y < sandH(f.target.x, f.target.z) + 1.2) continue;
@@ -191,7 +200,7 @@ function updateSolo(sp, dt) {
       if (fd) { tgt = fd.p; f.boost = foodBoost(f, 1.4); low = true; slow = f.p.distanceTo(fd.p) < 0.9; bite(f, fd, 0.3 * f.scale + 0.15); }
     }
     V3.subVectors(tgt, f.p); const d = V3.length();
-    V3.normalize().multiplyScalar(sp.speed[1] * f.boost * SPDK * Math.min(1, d / 1.5 + 0.3));
+    V3.normalize().multiplyScalar(speedHi(sp.speed[0], sp.speed[1], RW) * f.boost * SPDK * Math.min(1, d / 1.5 + 0.3));
     ACC.addScaledVector(V3.sub(f.v), sp.home ? 1.6 : 0.8);
     for (const g of F) if (g !== f) { V1.subVectors(f.p, g.p); const d2 = V1.lengthSq(); if (d2 < 1.0) ACC.addScaledVector(V1, (1 - d2) * 2); }
     commonForces(f, sp, dt);
@@ -426,7 +435,7 @@ function updateLighting() {
   U.uGlowK.value = 1 + 1.5 * K.night; U.uTurb.value = 0.4 + 2.0 * K.turb;
   renderer.toneMappingExposure = 1.08 + 0.3 * K.night;
   for (const m of FISH_MATS) m.envMapIntensity = 0.55 * (1 - 0.75 * K.night);
-  SPDK = 1 - 0.3 * K.night;
+  SPDK = 1 - 0.3 * K.night; RW = restWeight(K.night);
 }
 
 // ------------------------------------------------------------------ camera: intro dolly, auto-orbit, free mode, chase cam
@@ -531,6 +540,10 @@ SLIDERS.forEach(([k, label, mn, mx, st]) => {
   inp.addEventListener('change', () => blurIfPointer(inp));
   SL[k] = { inp, out }; out.textContent = fmt[k](K[k]); inp.setAttribute('aria-valuetext', vtext[k](K[k]));
   panel.querySelector('#sliders').appendChild(row);
+  if (k === 'pop') {   // A-04: подпись «стилизованное поведение» под ползунком «Рыбы»
+    const note = document.createElement('p'); note.className = 'note'; note.id = 'behaviorNote'; note.textContent = BEHAVIOR_NOTE;
+    inp.setAttribute('aria-describedby', 'behaviorNote'); row.after(note);
+  }
 });
 TOGGLES.forEach(([k, label, key]) => {
   const row = document.createElement('label'); row.className = 'tog';
