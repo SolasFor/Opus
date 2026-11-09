@@ -4,6 +4,8 @@
  * Тело — строки 156–324 модуля однофайловой Aquarium.html (D-13), перенесены дословно; швы — tests/split.test.js.
  * После тела — связка: reseed() и storePixelRatio(), через которые другие модули меняют seed и pixelRatio.
  * A-03: подводные поверхности (patch) — вода в линейном свете до тонмаппинга: waterLinear, causFade, uHazeK.
+ * A-03, шаг 2: каустики приходят по преломлённому солнцу (causSun, закон Снелла) — полные сверху, слабые на боку к солнцу,
+ * нет на теневом боку и на брюхе.
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -142,10 +144,13 @@ float causticT(vec2 uv, float time){
   float c1 = pow(1.0 - clamp(e1 * 2.4, 0.0, 1.0), 5.0), c2 = pow(1.0 - clamp(e2 * 2.6, 0.0, 1.0), 6.0);
   return c1 * 0.8 + c2 * 0.5 + c1 * c2 * 1.2;
 }
+// A-03 step 2: caustic light arrives along the sun direction refracted at the surface (Snell, water n = 1.333),
+// so it is Lambert-weighted against that direction and normalised to 1 on up-facing surfaces.
+vec3 causSun(){ vec3 s = normalize(uSunDir); float sa = length(s.xz), sw = sa / 1.333; vec2 h = sa > 1e-4 ? s.xz * (sw / sa) : vec2(0.0); return vec3(h.x, sqrt(1.0 - sw * sw), h.y); }
 float caustics(vec3 p, vec3 n){
   vec2 uv = p.xz + uSunDir.xz / uSunDir.y * (uBoxMax.y - p.y);
   float c = causticT(uv * 0.3, uTime * 0.7);
-  float up = clamp(n.y * 0.8 + 0.2, 0.0, 1.0);
+  vec3 cs = causSun(); float up = clamp(dot(n, cs) / cs.y, 0.0, 1.0);
   return c * up * mix(0.45, 1.0, clamp(p.y / uBoxMax.y, 0.0, 1.0)) * uCaus;
 }
 float bHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
