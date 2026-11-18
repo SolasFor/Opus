@@ -1,24 +1,25 @@
-/* Эффекты тактов: свечение камер сгорания, искра и вспышка, частицы смеси на впуске и газов на выпуске.
- * M-02b: раздел 8 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
- * проверяет tests/split-sync.test.js.
- * Состояние интерфейса ui и effSpeed() остаются в main.js (раздел 10): main.js передаёт их через
- * setEffectsSource(ui, effSpeed) при загрузке, до первого кадра.
+/* Эффекты тактов V12: свечение 12 камер сгорания вдоль осей развала ±30°, искра и парные вспышки,
+ * тепловая подсветка коллекторов, частицы смеси на впуске и выхлопных газов.
+ * stepParticles() сохраняет точную реализацию переноса периода для step-particles.test.js.
  */
 import * as THREE from 'three';
-import { PIN_TOP, BORE_R, SPARK_ADV } from '../../config/engine-spec.js';
+import { CYLINDERS, PIN_TOP, BORE_R, SPARK_ADV, bankOf } from '../../config/engine-spec.js';
 import { clamp01, mod, smooth } from '../../sim/math.js';
 import { audio } from '../../audio/engine-audio.js';
-import { CYL_X, HEAD_BOT, V3 } from '../world.js';
-import { pixelRatio, engineRoot, flashLight } from '../scene.js';
+import { CYL_X, HEAD_BOT_R, V3, bankPoint, bankQuat } from '../world.js';
+import { pixelRatio, engineRoot, flashLight, exhaustLight } from '../scene.js';
 import { nodes } from '../parts/nodes.js';
-import { intakePaths, exhaustPaths } from '../parts/intake.js';
-import { sim, _m4, _p, _s, _qI, cycDeg, phaseOf } from '../kinematics.js';
+import { intakePaths } from '../parts/intake.js';
+import { exhaustPaths } from '../parts/exhaust.js';
+import { sim, _m4, _p, _s, cycDeg, phaseOf } from '../kinematics.js';
 
 let ui, effSpeed;
 const setEffectsSource = (state, speed) => { ui = state; effSpeed = speed; };
 
-let chamberMesh, sparkSprite, flashSprite, inPts, exPts;
+let chamberMesh, sparkSprite, flashSprites = [], inPts, exPts;
 const fx = { chamber: 0, intake: 0, exhaust: 0, view: 0 };
+const _bq = [];
+
 function glowTexture(stops, size = 128, star = false) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -38,8 +39,11 @@ function glowTexture(stops, size = 128, star = false) {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+
 function buildEffects() {
-  // chamber gas volumes: 4 instances, colour = additive intensity
+  _bq[0] = bankQuat(0);
+  _bq[1] = bankQuat(1);
+
   const geo = new THREE.CylinderGeometry(BORE_R - 0.02, BORE_R - 0.02, 1, 32, 1, false).translate(0, 0.5, 0);
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
@@ -61,27 +65,34 @@ function buildEffects() {
       void main(){
         float f = abs(dot(normalize(vN), normalize(vV)));
         float a = 0.25 + 0.75 * f * f;
-        a *= 0.55 + 0.45 * smoothstep(0.0, 1.0, vY);   // denser near the roof (spark side)
+        a *= 0.55 + 0.45 * smoothstep(0.0, 1.0, vY);
         gl_FragColor = vec4(vCol * a, 1.0);
       }`
   });
-  chamberMesh = new THREE.InstancedMesh(geo, mat, 4);
+  chamberMesh = new THREE.InstancedMesh(geo, mat, CYLINDERS);
   chamberMesh.frustumCulled = false;
   chamberMesh.renderOrder = 5;
-  for (let i = 0; i < 4; i++) chamberMesh.setColorAt(i, new THREE.Color(0, 0, 0));
+  for (let i = 0; i < CYLINDERS; i++) chamberMesh.setColorAt(i, new THREE.Color(0, 0, 0));
   engineRoot.add(chamberMesh);
 
-  sparkSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture([[0, 'rgba(255,255,255,1)'], [0.12, 'rgba(200,225,255,0.95)'], [0.35, 'rgba(120,170,255,0.35)'], [1, 'rgba(80,120,255,0)']], 128, true),
-    blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+  sparkSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture([[0, 'rgba(255,255,255,1)'], [0.12, 'rgba(200,225,255,0.95)'], [0.35, 'rgba(120,170,255,0.35)'], [1, 'rgba(80,120,255,0)']], 128, true),
+    blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0
+  }));
   sparkSprite.scale.setScalar(0.32);
   sparkSprite.renderOrder = 7;
-  flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture([[0, 'rgba(255,250,235,1)'], [0.2, 'rgba(255,200,110,0.8)'], [0.5, 'rgba(255,120,40,0.28)'], [1, 'rgba(255,80,20,0)']]),
-    blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
-  flashSprite.renderOrder = 6;
-  engineRoot.add(sparkSprite, flashSprite);
+  engineRoot.add(sparkSprite);
 
-  inPts = makeParticles(intakePaths, 26, 0x5ab8ff, 0x9fe0ff, 0.075);
-  exPts = makeParticles(exhaustPaths, 30, 0xffa040, 0x8a8f96, 0.09);
+  const flashTex = glowTexture([[0, 'rgba(255,250,235,1)'], [0.2, 'rgba(255,200,110,0.8)'], [0.5, 'rgba(255,120,40,0.28)'], [1, 'rgba(255,80,20,0)']]);
+  flashSprites = [0, 1].map(() => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+    s.renderOrder = 6;
+    engineRoot.add(s);
+    return s;
+  });
+
+  inPts = makeParticles(intakePaths, 16, 0x5ab8ff, 0x9fe0ff, 0.075);
+  exPts = makeParticles(exhaustPaths, 18, 0xffa040, 0x8a8f96, 0.09);
 }
 
 /* small GPU point clouds following precomputed path look-up tables */
@@ -158,7 +169,7 @@ function stepParticles(P, lifts, dPhi, k, vis) {
 
 const _col = new THREE.Color();
 function chamberColor(phi, out) {
-  const pc = phi >= 700 ? phi - 720 : phi;   // −20 … 700
+  const pc = phi >= 700 ? phi - 720 : phi;
   let r = 0, g = 0, b = 0;
   if (pc >= -SPARK_ADV && pc < 180) {
     const t = pc + SPARK_ADV;
@@ -177,7 +188,7 @@ function chamberColor(phi, out) {
   }
   return out.setRGB(r, g, b);
 }
-/* flash curve (0..1) of the combustion just after the spark */
+
 function flashAmount(phi) {
   const pc = phi >= 700 ? phi - 720 : phi;
   if (pc < -SPARK_ADV || pc > 100) return 0;
@@ -196,17 +207,23 @@ function updateEffects(dt, dPhi) {
   fx.exhaust = asm * (1 - smooth(0.02, 0.15, P('exhaust'))) * (isoOK('exhaust') ? 1 : 0);
   const inside = ui.view === 'solid' ? 0.35 : 1;
 
-  // chamber gas
-  let fireCyl = -1, fireAmt = 0, sparkCyl = -1, sparkAmt = 0;
-  for (let i = 0; i < 4; i++) {
+  let fireCyl = -1, fireAmt = 0, fireCyl2 = -1, fireAmt2 = 0;
+  let sparkCyl = -1, sparkAmt = 0;
+
+  for (let i = 0; i < CYLINDERS; i++) {
+    const b = bankOf(i);
     const phi = phaseOf(i);
-    const crown = sim.pistonY[i] + PIN_TOP + 0.012;
-    _m4.compose(_p.set(CYL_X[i], crown, 0), _qI, _s.set(1, Math.max(0.001, HEAD_BOT - crown), 1));
+    const crownR = sim.pistonR[i] + PIN_TOP + 0.012;
+    _p.copy(bankPoint(b, CYL_X[i], crownR, 0));
+    _m4.compose(_p, _bq[b], _s.set(1, Math.max(0.001, HEAD_BOT_R - crownR), 1));
     chamberMesh.setMatrixAt(i, _m4);
     chamberColor(phi, _col).multiplyScalar(fx.chamber);
     chamberMesh.setColorAt(i, _col);
+
     const fa = flashAmount(phi);
-    if (fa > fireAmt) { fireAmt = fa; fireCyl = i; }
+    if (fa > fireAmt) { fireAmt2 = fireAmt; fireCyl2 = fireCyl; fireAmt = fa; fireCyl = i; }
+    else if (fa > fireAmt2) { fireAmt2 = fa; fireCyl2 = i; }
+
     const pc = phi >= 700 ? phi - 720 : phi;
     const sp = (pc >= -SPARK_ADV - 1 && pc < -SPARK_ADV + 7) ? 1 - Math.abs(pc + SPARK_ADV - 2) / 5 : 0;
     if (sp > sparkAmt) { sparkAmt = sp; sparkCyl = i; }
@@ -215,36 +232,41 @@ function updateEffects(dt, dPhi) {
   chamberMesh.instanceColor.needsUpdate = true;
   chamberMesh.visible = fx.chamber > 0.01;
 
-  // spark at the plug tip (+ a little flicker), flash ball + one moving point light
   if (sparkCyl >= 0 && fx.chamber > 0.01) {
-    sparkSprite.position.set(CYL_X[sparkCyl], HEAD_BOT - 0.045, 0);
+    sparkSprite.position.copy(bankPoint(bankOf(sparkCyl), CYL_X[sparkCyl], HEAD_BOT_R - 0.045, 0));
     sparkSprite.material.opacity = clamp01(sparkAmt) * fx.chamber * (0.75 + 0.25 * Math.random());
     sparkSprite.material.rotation = Math.random() * Math.PI;
   } else sparkSprite.material.opacity = 0;
   sparkSprite.visible = sparkSprite.material.opacity > 0.01;
-  if (fireCyl >= 0 && fx.chamber > 0.01) {
-    const crown = sim.pistonY[fireCyl] + PIN_TOP;
-    flashSprite.position.set(CYL_X[fireCyl], (crown + HEAD_BOT) / 2 + 0.02, 0.05);
-    flashSprite.scale.setScalar(0.7 + 0.9 * Math.min(1, fireAmt));
-    flashSprite.material.opacity = Math.min(1, fireAmt) * fx.chamber;
-    flashLight.position.copy(flashSprite.position);
-    flashLight.intensity = 9 * Math.min(1.2, fireAmt) * fx.chamber * inside;
-  } else { flashSprite.material.opacity = 0; flashLight.intensity = 0; }
-  flashSprite.visible = flashSprite.material.opacity > 0.01;
 
-  // particles move with the crank (so scrubbing moves them too)
+  [[fireCyl, fireAmt], [fireCyl2, fireAmt2]].forEach(([fc, fa], idx) => {
+    const spr = flashSprites[idx];
+    if (fc >= 0 && fa > 0.02 && fx.chamber > 0.01) {
+      const crownR = sim.pistonR[fc] + PIN_TOP;
+      spr.position.copy(bankPoint(bankOf(fc), CYL_X[fc], (crownR + HEAD_BOT_R) * 0.5 + 0.02, 0.04));
+      spr.scale.setScalar(0.65 + 0.85 * Math.min(1, fa));
+      spr.material.opacity = Math.min(1, fa) * fx.chamber;
+    } else spr.material.opacity = 0;
+    spr.visible = spr.material.opacity > 0.01;
+  });
+
+  if (fireCyl >= 0 && fx.chamber > 0.01) {
+    flashLight.position.copy(flashSprites[0].position);
+    flashLight.intensity = 9.5 * Math.min(1.2, fireAmt) * fx.chamber * inside;
+  } else flashLight.intensity = 0;
+
+  if (exhaustLight) exhaustLight.intensity = 3.2 * sim.heat * fx.exhaust;
+
   stepParticles(inPts, sim.intakeLift, dPhi, 1 / 85, fx.intake);
   stepParticles(exPts, sim.exhaustLift, dPhi, 1 / 75, fx.exhaust);
 
-  // exhaust heat builds up slowly with speed, cools when stopped
   const target = sim.running ? clamp01((effSpeed() - 0.6) / 5) : 0;
   sim.heat += (target - sim.heat) * (1 - Math.exp(-dt * (target > sim.heat ? 0.35 : 0.2)));
 
-  // sound: one thump per combustion event
   if (lastPhi !== null && dPhi > 0 && dPhi < 360) {
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < CYLINDERS; i++) {
       const now = phaseOf(i), before = mod(now - dPhi, 720);
-      if (before > now && fx.chamber > 0.01) audio.fire(i);   // crossed TDC (wrap 720 → 0)
+      if (before > now && fx.chamber > 0.01) audio.fire(i);
     }
   }
   lastPhi = cycDeg();

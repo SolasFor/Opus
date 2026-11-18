@@ -183,6 +183,7 @@ function nodeMat(node, base) {
   return ud.mats.get(base);
 }
 function registerLocalPart(node, object, orig, expl) {
+  if (!object.parent) node.add(object);
   node.userData.localParts.push({ object, orig: V3(...orig), expl: V3(...expl) });
   object.position.set(...orig);
 }

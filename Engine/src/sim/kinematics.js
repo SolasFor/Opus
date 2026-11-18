@@ -1,33 +1,49 @@
 /**
- * @file Кривошипно-шатунный механизм (слой sim, уровень L0 — точная формула без упрощений).
+ * @file Точная кинематика V12 60° (слой sim, уровень L0).
  *
- * M-01a: перенесено из Engine/Engine.html@10c79c8:1379–1384 без изменений.
- * Параметры — группа A «3D, 85×72»: CRANK_Y, CRANK_R, ROD_L.
- * Копия формулы в updateKinematics (Engine.html:1391–1393) намеренно не объединена с этой:
- * там угол берётся от θ без приведения по модулю, и результаты расходятся до ~1e-14 u.
+ * Все двенадцать поршней работают на общих шести шатунных шейках:
+ *   – шейка t ∈ 0…5 движется по окружности радиуса CRANK_R с углом θ + THROW_PSI[t];
+ *   – поршень цилиндра c (ряд b = bankOf(c)) движется вдоль оси своего ряда α_b = ±30° на расстоянии
+ *     pistonPinDist(φ_c) от оси коленвала, где φ_c = θ/DEG − FIRE_DEG[c].
  */
-import { DEG, CRANK_Y, CRANK_R, ROD_L } from '../config/engine-spec.js';
+import { DEG, CRANK_Y, CRANK_R, ROD_L, FIRE_DEG, THROW_PSI, bankOf, bankAngle } from '../config/engine-spec.js';
 
-/* exact slider-crank position for a phase (deg) → wrist-pin height */
 /**
- * Высота оси поршневого пальца для фазы цилиндра.
- * @param {number} phiDeg φ — фаза цилиндра, ГРАДУСЫ (0 — ВМТ), любое число.
- * @returns {number} координата Y оси пальца в сцене, u (1 u = 100 мм, соглашение модели), от PIN_BDC до PIN_TDC.
- * Источник: Engine.html:1380–1383.
+ * Радиальное расстояние оси поршневого пальца от оси коленвала вдоль оси цилиндра.
+ * @param {number} phiDeg φ — фаза цилиндра, ГРАДУСЫ (0 — ВМТ).
+ * @returns {number} радиус вдоль оси ряда, u.
  */
-export function pistonPinY(phiDeg) {
-  const a = phiDeg * DEG, pinY = CRANK_Y + CRANK_R * Math.cos(a), pinZ = CRANK_R * Math.sin(a);
-  return pinY + Math.sqrt(ROD_L * ROD_L - pinZ * pinZ);
+export function pistonPinDist(phiDeg) {
+  const a = phiDeg * DEG, along = CRANK_R * Math.cos(a), lat = CRANK_R * Math.sin(a);
+  return along + Math.sqrt(ROD_L * ROD_L - lat * lat);
+}
+
+export const PIN_TDC_R = pistonPinDist(0);
+export const PIN_BDC_R = pistonPinDist(180);
+
+/**
+ * Эквивалентная высота (для термодинамического расчёта хода) = CRANK_Y + pistonPinDist(φ).
+ * @param {number} phiDeg φ — фаза цилиндра, ГРАДУСЫ.
+ * @returns {number} u.
+ */
+export function pistonPinY(phiDeg) { return CRANK_Y + pistonPinDist(phiDeg); }
+
+export const PIN_TDC = pistonPinY(0);
+export const PIN_BDC = pistonPinY(180);
+
+/**
+ * Координаты (y, z) центра шатунной шейки t ∈ 0…5 при угле коленвала θ (РАДИАНЫ).
+ */
+export function crankPinYZ(thetaRad, throwIdx) {
+  const a = thetaRad + THROW_PSI[throwIdx];
+  return [CRANK_Y + CRANK_R * Math.cos(a), CRANK_R * Math.sin(a)];
 }
 
 /**
- * Высота оси пальца в ВМТ (φ = 0°), ≈ 2,16 u.
- * Единицы: u. Источник: Engine.html:1384. Группа: A (вычисляется из CRANK_Y, CRANK_R, ROD_L).
+ * Координаты (y, z) поршневого пальца цилиндра c ∈ 0…11 при угле коленвала θ (РАДИАНЫ).
  */
-export const PIN_TDC = pistonPinY(0);
-
-/**
- * Высота оси пальца в НМТ (φ = 180°), ≈ 1,44 u.
- * Единицы: u. Источник: Engine.html:1384. Группа: A (вычисляется из CRANK_Y, CRANK_R, ROD_L).
- */
-export const PIN_BDC = pistonPinY(180);
+export function wristPinYZ(thetaRad, cylIdx) {
+  const a = bankAngle(bankOf(cylIdx));
+  const r = pistonPinDist(thetaRad / DEG - FIRE_DEG[cylIdx]);
+  return [CRANK_Y + r * Math.cos(a), r * Math.sin(a)];
+}

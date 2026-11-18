@@ -188,8 +188,8 @@ test('кадр и снимок экрана рисует renderFrame(); renderer
   assert.ok(dispose.indexOf('disposePost();') > 0 && dispose.indexOf('disposePost();') < dispose.indexOf('renderer.dispose();'), 'disposePost() до renderer.dispose()');
   const post = read('../src/render/post.js');
   assert.match(fn(post, 'renderFrame'), /^function renderFrame\(\) \{\n  updateShadows\(renderer, scene\);[^\n]*\n  if \(!rt\) \{ renderer\.render\(scene, camera\); return; \}/, 'без AO — прежний renderer.render()');
-  assert.match(fn(post, 'renderFrame'), /try \{ gtao\.render\(renderer, null, rt\); \} catch \(err\) \{ failed = err; \}[^\n]*\n  if \(failed\) \{[^\n]*\n[^\n]*\n    disposePost\(\);\n    renderer\.render\(scene, camera\);\n  \}\n?$/,
-    'ошибка в проходах GTAO выключает AO, кадр дорисовывается без него');
+  assert.match(fn(post, 'renderFrame'), /try \{ gtao\.render\(renderer, null, rt\); renderBloom\(\); \} catch \(err\) \{ failed = err; \}[^\n]*\n  if \(failed\) \{[^\n]*\n[^\n]*\n    disposePost\(\);\n    renderer\.render\(scene, camera\);\n  \}\n?$/,
+    'ошибка в проходах GTAO/bloom выключает AO и bloom, кадр дорисовывается без них');
 });
 
 test('AO: кадр в буфер — с той же тональной компрессией и sRGB, что на экране; туман подменяется на время прохода', () => {

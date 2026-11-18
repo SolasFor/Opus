@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Четырёхтактный двигатель · интерактивная 3D-разборка</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='7' fill='%2313233a' stroke='%234da3ff' stroke-width='2'/%3E%3Ctext x='16' y='22.5' text-anchor='middle' font-family='system-ui,sans-serif' font-size='16' font-weight='800' fill='%23e2f1ff'%3E4%D0%A2%3C/text%3E%3C/svg%3E" />
+<title>Атмосферный V12 60° · интерактивная 3D-разборка</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='7' fill='%2313233a' stroke='%234da3ff' stroke-width='2'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='system-ui,sans-serif' font-size='13' font-weight='800' fill='%23e2f1ff'%3EV12%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="./styles/tokens.css" onerror="window.__engStyleError ? __engStyleError() : (window.__engStyleFailed = true)" />
 <link rel="stylesheet" href="./styles/app.css" onerror="window.__engStyleError ? __engStyleError() : (window.__engStyleFailed = true)" />
 </head>
@@ -19,14 +19,14 @@
 
 <header id="appbar" class="appbar">
   <button class="btn icon ghost drawer-btn" id="drawerLeft" type="button" aria-controls="hud" aria-pressed="false" aria-label="Панель «Разборка»" title="Разборка и детали"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg></button>
-  <div class="brand"><span class="logo">ДВС · 4Т</span><div class="brand-t"><h1>Четырёхтактный двигатель</h1><p class="sub">Рядная «четвёрка» · DOHC 16 клапанов</p></div></div>
+  <div class="brand"><span class="logo">V12 · 48V</span><div class="brand-t"><h1>Двигатель V12 60°</h1><p class="sub">5,5&nbsp;л · Quad-Cam DOHC · 48 клапанов</p></div></div>
   <span class="spacer"></span>
   <div class="seg" id="viewSeg" role="radiogroup" aria-label="Вид">
     <button data-mode="solid" aria-keyshortcuts="X" type="button" role="radio" aria-checked="true" class="act" title="Вид · X">Сплошной</button>
     <button data-mode="xray" aria-keyshortcuts="X" type="button" role="radio" aria-checked="false" tabindex="-1" title="Вид · X">Рентген</button>
     <button data-mode="cut" aria-keyshortcuts="X" type="button" role="radio" aria-checked="false" tabindex="-1" title="Вид · X">Разрез</button>
   </div>
-  <div id="cutRow" class="cut-row"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M12 4v16" stroke-dasharray="2 2.2"/></svg><label class="label" for="cutSlider">Плоскость</label><input type="range" id="cutSlider" class="warm" min="0" max="100" step="1" value="45" aria-label="Положение плоскости разреза" /><b class="val" id="cutVal">по осям цилиндров</b></div>
+  <div id="cutRow" class="cut-row"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M12 4v16" stroke-dasharray="2 2.2"/></svg><label class="label" for="cutSlider">Плоскость</label><input type="range" id="cutSlider" class="warm" min="0" max="100" step="1" value="74" aria-label="Положение плоскости разреза" /><b class="val" id="cutVal">по цил.&nbsp;5&nbsp;и&nbsp;11</b></div>
   <div id="isoBar" class="iso-chip"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/></svg><span>Изолировано: <b id="isoName">—</b></span><button class="btn sm icon ghost" id="btnUnIso" aria-keyshortcuts="Escape" type="button" aria-label="Показать всё (Esc)" title="Показать всё · Esc"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
   <span class="spacer"></span>
   <div class="menu-wrap">
@@ -102,11 +102,11 @@
     </div>
   </section>
   <section class="sec" data-sec="phases">
-    <h2 class="sec-hd"><button class="sec-h" type="button" aria-expanded="true" aria-controls="sec-phases"><svg class="i s chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="sec-t">Фазы цилиндров</span> <span class="val">1–3–4–2</span></button></h2>
+    <h2 class="sec-hd"><button class="sec-h" type="button" aria-expanded="true" aria-controls="sec-phases"><svg class="i s chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="sec-t">Фазы цилиндров</span> <span class="val">интервал 60°</span></button></h2>
     <div class="sec-b" id="sec-phases">
       <div class="phases" id="phases" role="group" aria-label="Такты цилиндров за цикл 0–720°; строка выбирает цилиндр для p–V"></div>
       <div class="fire" id="fireRow"><span>Порядок работы</span>
-        <button class="chip c" type="button" data-c="0">1</button><i>–</i><button class="chip c" type="button" data-c="2">3</button><i>–</i><button class="chip c" type="button" data-c="3">4</button><i>–</i><button class="chip c" type="button" data-c="1">2</button>
+        <button class="chip c" type="button" data-c="0">1</button><i>–</i><button class="chip c" type="button" data-c="6">7</button><i>–</i><button class="chip c" type="button" data-c="4">5</button><i>–</i><button class="chip c" type="button" data-c="10">11</button><i>–</i><button class="chip c" type="button" data-c="2">3</button><i>–</i><button class="chip c" type="button" data-c="8">9</button><i>–</i><button class="chip c" type="button" data-c="5">6</button><i>–</i><button class="chip c" type="button" data-c="11">12</button><i>–</i><button class="chip c" type="button" data-c="1">2</button><i>–</i><button class="chip c" type="button" data-c="7">8</button><i>–</i><button class="chip c" type="button" data-c="3">4</button><i>–</i><button class="chip c" type="button" data-c="9">10</button>
       </div>
       <div class="legend">
         <span class="s-in"><b>1</b>Впуск</span><span class="s-co"><b>2</b>Сжатие</span><span class="s-po"><b>3</b>Рабочий ход</span><span class="s-ex"><b>4</b>Выпуск</span>
@@ -142,7 +142,7 @@
 <aside id="sheet" class="panel sheet" aria-label="Панель управления" hidden>
   <div class="sheet-head" id="sheetHead">
     <button class="sheet-handle" id="sheetHandle" type="button" aria-controls="sheetBody" aria-expanded="false" aria-label="Развернуть шторку"><span aria-hidden="true"></span></button>
-    <div class="sheet-bar" id="sheetBar"><div class="bar-slot" id="barSlot"></div><div class="fire-mini" id="fireMini" aria-hidden="true"><i data-c="0">1</i><i data-c="2">3</i><i data-c="3">4</i><i data-c="1">2</i></div></div>
+    <div class="sheet-bar" id="sheetBar"><div class="bar-slot" id="barSlot"></div><div class="fire-mini" id="fireMini" aria-hidden="true"><i data-c="0">1</i><i data-c="6">7</i><i data-c="4">5</i><i data-c="10">11</i><i data-c="2">3</i><i data-c="8">9</i><i data-c="5">6</i><i data-c="11">12</i><i data-c="1">2</i><i data-c="7">8</i><i data-c="3">4</i><i data-c="9">10</i></div></div>
   </div>
   <div class="sheet-tabs" id="sheetTabs" role="tablist" aria-label="Разделы панели">
     <button type="button" role="tab" id="tab-work" data-tab="work" aria-controls="pane-work" aria-selected="true">Работа</button>
@@ -231,11 +231,10 @@
   (function () {
     var LABEL = { retry: 'Повторить', refresh: 'Обновить', reload: 'Перезагрузить' };
     var CDN = 'Библиотека Three.js не загрузилась с CDN (unpkg.com). Проверьте подключение к интернету и нажмите «Повторить».';
-    var APP = 'Не загрузились файлы приложения, хотя CDN (unpkg.com) доступен. Нажмите «Повторить». Если ошибка не исчезнет, откройте однофайловую версию.';
-    var FILE = 'Эта версия работает только через веб-сервер: файл открыт с диска, и браузер не загружает её модули. ' +
-      'Без сервера откройте однофайловую версию Engine.html или запустите сервер в корне репозитория: <code>python3 -m http.server</code>.';
-    var STYLE = 'Не загрузились файлы оформления приложения (<code>styles/</code>). Проверьте подключение к интернету и нажмите «Повторить». ' +
-      'Если ошибка не исчезнет, откройте однофайловую версию.';
+    var APP = 'Не загрузились файлы приложения, хотя CDN (unpkg.com) доступен. Проверьте сервер или интернет и нажмите «Повторить».';
+    var FILE = 'Эта версия работает только через веб-сервер: файл открыт с диска, и браузер не загружает ES-модули. ' +
+      'Запустите сервер в корне репозитория: <code>python3 -m http.server</code> и откройте <code>http://localhost:8000/Engine/</code>.';
+    var STYLE = 'Не загрузились файлы оформления приложения (<code>styles/</code>). Проверьте подключение к интернету и нажмите «Повторить».';
     var root = document.documentElement, timer = 0;
     var esc = window.__engEsc = function (s) {
       return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
@@ -254,8 +253,7 @@
       msg.className = state === 'failed' ? 'err' : '';
       msg.innerHTML = html;
       act.innerHTML = (acts || []).map(function (a) {
-        return a === 'legacy' ? '<a class="btn accent" href="Engine.html">Открыть Engine.html</a>'
-          : '<button class="btn' + (a === 'retry' ? ' accent' : '') + '" type="button" onclick="location.reload()">' + LABEL[a] + '</button>';
+        return '<button class="btn' + (a === 'retry' ? ' accent' : '') + '" type="button" onclick="location.reload()">' + LABEL[a] + '</button>';
       }).join('');
       act.hidden = !act.innerHTML;
     };
@@ -267,12 +265,12 @@
     /* ошибка загрузки main.js или его импортов приходит сразу (onerror у модуля); что именно не загрузилось, показывает пробный запрос к CDN */
     window.__engModuleError = function () {
       if (window.__engOk || window.__engFailed) return;
-      if (location.protocol === 'file:') return fail(FILE, ['legacy']);
+      if (location.protocol === 'file:') return fail(FILE, ['reload']);
       var url = 'https://unpkg.com/three@0.160.0/build/three.module.js';
       try { url = JSON.parse(document.querySelector('script[type="importmap"]').textContent).imports.three || url; } catch (e) {}
       var cdn = function () { fail(CDN, ['retry']); };
       setTimeout(cdn, 8000);
-      fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }).then(function () { fail(APP, ['retry', 'legacy']); }, cdn);
+      fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }).then(function () { fail(APP, ['retry']); }, cdn);
     };
     /* M-05a: не загрузился файл стилей (onerror у <link> в <head>; он может сработать и до этого скрипта — тогда флаг
        __engStyleFailed). Без стилей страница непригодна: экран ошибки получает свои встроенные стили, а main.js по флагу
@@ -283,7 +281,7 @@
       document.getElementById('loader').style.cssText = 'position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;gap:18px;' +
         'align-items:center;justify-content:center;padding:24px;text-align:center;background:#0f1115;color:#e8edf5;font:14px/1.6 system-ui,sans-serif;color-scheme:dark';
       document.getElementById('loaderAct').style.cssText = 'display:flex;gap:12px;align-items:center';
-      fail(STYLE, ['retry', 'legacy']);
+      fail(STYLE, ['retry']);
     };
     window.addEventListener('error', function (e) {
       if (e && e.message) fail('Ошибка при запуске: ' + esc(e.message), ['reload']);

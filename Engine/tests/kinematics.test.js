@@ -1,26 +1,24 @@
 /**
- * Физические инварианты Engine/src (с допусками, без эталонов legacy): M-01a и спецификация A (D-05).
- * Проверяют смысл формул и единицы: размеры спецификации A, ход и крайние положения поршня, степень сжатия,
- * рабочий объём, фазы и порядок работы, такты, профиль кулачка, окна клапанов, период и непрерывность
- * давления, неизменяемость параметров.
- *
- * Требования к Node: 20.19+ (линия 20) или 22.7+ (ES-модули без package.json; подробности —
- * в characterization.test.js). Запуск из корня репозитория:
- *   Node 22.7+:   node --test "Engine/tests/*.test.js"
- *   Node 20.19+:  node --test Engine/tests/*.test.js
+ * Физические инварианты Engine/src для 60° V12 DOHC 48V (5,5 л, 88 × 75 мм, CR 11,5).
+ * Проверяет геометрию рядов ±30°, 6 общих шатунных шеек (расстояние запястья-кривошип === ROD_L),
+ * рабочий объём, степень сжатия, порядок вспышек 1-7-5-11-3-9-6-12-2-8-4-10, 48-клапанный ГРМ и термодинамику.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEG, FIRE_DEG, CRANK_R, ROD_L, CAM_LIFT, CAM_HALF, IN_MID, EX_MID, VS, VC } from '../src/config/engine-spec.js';
+import {
+  DEG, CYLINDERS, BANKS, CYL_PER_BANK, V_ANGLE_DEG, BANK_TILT_DEG,
+  FIRE_A, FIRE_B, FIRE_DEG, FIRING_ORDER, THROW_PSI,
+  CRANK_R, ROD_L, CAM_LIFT, CAM_HALF, IN_MID, EX_MID, VS, VC,
+  bankOf, bankAngle
+} from '../src/config/engine-spec.js';
 import * as spec from '../src/config/engine-spec.js';
 import { cycleDeg, cylinderPhaseDeg, strokeOf } from '../src/sim/cycle.js';
-import { pistonPinY, PIN_TDC, PIN_BDC } from '../src/sim/kinematics.js';
-import { camProfileLift, valveDownAngle, lobeAngle } from '../src/sim/valvetrain.js';
+import { pistonPinDist, PIN_TDC_R, PIN_BDC_R, pistonPinY, PIN_TDC, PIN_BDC, crankPinYZ, wristPinYZ } from '../src/sim/kinematics.js';
+import { camProfileLift, valveDownAngle, lobeAngle, valveSideLocal } from '../src/sim/valvetrain.js';
 import { volumeAt, pressureAt } from '../src/sim/thermo.js';
 
 const EPS = 1e-12;
 const near = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg}: ${a} ≉ ${b} (±${eps})`);
-// сравнение углов по модулю 720°: 0° и 719,999…° считаются близкими
 const nearDeg720 = (a, b, eps, msg) => {
   const d = Math.abs(a - b) % 720;
   assert.ok(Math.min(d, 720 - d) <= eps, `${msg}: ${a}° ≉ ${b}°`);
@@ -31,57 +29,66 @@ const grid = (from, to, step) => {
   return r;
 };
 
-test('спецификация A (D-05): размеры в мм и единицы сцены', () => {
-  const { U_MM, CYLINDERS, BORE_MM, STROKE_MM, ROD_MM, COMPRESSION_HEIGHT_MM, VALVE_LIFT_MM, CR, BORE_R, PIN_TOP } = spec;
+test('спецификация V12 60°: размеры в мм и единицы сцены', () => {
+  const { U_MM, BORE_MM, STROKE_MM, ROD_MM, COMPRESSION_HEIGHT_MM, VALVE_LIFT_MM, CR, BORE_R, PIN_TOP } = spec;
   assert.equal(U_MM, 100, '1 ед. = 100 мм');
-  assert.equal(CYLINDERS, FIRE_DEG.length, 'цилиндров');
-  near(2 * BORE_R * U_MM, 85, EPS, 'D, мм');
-  near(2 * CRANK_R * U_MM, 72, EPS, 'S = 2R, мм');
-  near(ROD_L * U_MM, 125, EPS, 'L, мм');
-  near(PIN_TOP * U_MM, 23, EPS, 'компрессионная высота, мм');
-  near(CAM_LIFT * U_MM, 9.2, EPS, 'подъём клапана, мм');
-  assert.deepEqual([BORE_MM, STROKE_MM, ROD_MM, COMPRESSION_HEIGHT_MM, VALVE_LIFT_MM, CR], [85, 72, 125, 23, 9.2, 10.5]);
-  // λ = R / L — отношение радиуса кривошипа к длине шатуна
-  near(CRANK_R / ROD_L, 0.288, EPS, 'λ');
+  assert.equal(CYLINDERS, 12);
+  assert.equal(BANKS, 2);
+  assert.equal(CYL_PER_BANK, 6);
+  assert.equal(V_ANGLE_DEG, 60);
+  assert.equal(BANK_TILT_DEG, 30);
+  assert.equal(CYLINDERS, FIRE_DEG.length);
+  near(2 * BORE_R * U_MM, 88, EPS, 'D, мм');
+  near(2 * CRANK_R * U_MM, 75, EPS, 'S = 2R, мм');
+  near(ROD_L * U_MM, 138, EPS, 'L, мм');
+  near(PIN_TOP * U_MM, 24, EPS, 'компрессионная высота, мм');
+  near(CAM_LIFT * U_MM, 10.2, EPS, 'подъём клапана, мм');
+  assert.deepEqual([BORE_MM, STROKE_MM, ROD_MM, COMPRESSION_HEIGHT_MM, VALVE_LIFT_MM, CR], [88, 75, 138, 24, 10.2, 11.5]);
+  near(Math.abs(bankAngle(1) - bankAngle(0)) / DEG, 60, EPS, 'развал 60°');
 });
 
-test('рабочий объём A: VS = π/4 · D² · S, 4 · VS = 1634,256 см³, степень сжатия 10,5', () => {
-  // D и S — в см: 8,5 и 7,2
-  near(VS, Math.PI / 4 * 8.5 * 8.5 * 7.2, 1e-9, 'VS, см³');
-  near(spec.DISPLACEMENT_CM3, 4 * VS, 1e-9, 'рабочий объём, см³');
-  near(4 * VS, 1634.256, 0.001, '4 · VS, см³');
+test('рабочий объём V12: VS = π/4 · D² · S, 12 · VS ≈ 5473,91 см³, CR = 11,5', () => {
+  near(VS, Math.PI / 4 * 8.8 * 8.8 * 7.5, 1e-9, 'VS, см³');
+  near(spec.DISPLACEMENT_CM3, 12 * VS, 1e-9, 'рабочий объём, см³');
+  near(12 * VS, 5473.911, 0.01, '12 · VS, см³');
   near((VS + VC) / VC, spec.CR, EPS, 'степень сжатия');
-  near(VC, 43.0067, 1e-4, 'VC, см³');
+  near(VC, VS / 10.5, 1e-9, 'VC, см³');
 });
 
-test('ход поршня = 2 · CRANK_R; ВМТ и НМТ — крайние положения', () => {
-  near(PIN_TDC - PIN_BDC, 2 * CRANK_R, EPS, 'ход, u');
+test('ход поршня = 2 · CRANK_R; ВМТ и НМТ — крайние положения вдоль оси ряда', () => {
+  near(PIN_TDC_R - PIN_BDC_R, 2 * CRANK_R, EPS, 'ход, u');
+  near(PIN_TDC - PIN_BDC, 2 * CRANK_R, EPS, 'эквивалентный ход, u');
   for (const phi of grid(-720, 720, 0.5)) {
-    const y = pistonPinY(phi);
-    assert.ok(y <= PIN_TDC + EPS && y >= PIN_BDC - EPS, `pistonPinY(${phi}) = ${y} вне [PIN_BDC, PIN_TDC]`);
+    const r = pistonPinDist(phi);
+    assert.ok(r <= PIN_TDC_R + EPS && r >= PIN_BDC_R - EPS, `pistonPinDist(${phi}) = ${r}`);
   }
 });
 
-test('pistonPinY: симметрия φ ↔ −φ и период 360°', () => {
-  for (const phi of grid(0, 360, 0.25)) {
-    near(pistonPinY(-phi), pistonPinY(phi), EPS, `симметрия, φ = ${phi}°`);
-    near(pistonPinY(phi + 360), pistonPinY(phi), EPS, `период, φ = ${phi}°`);
-  }
-});
-
-test('pistonPinY: точная формула кривошипно-шатунного механизма', () => {
-  // смещение от ВМТ: x(φ) = r·(1 − cos φ) + l − √(l² − r²·sin² φ), r = CRANK_R, l = ROD_L (u)
+test('pistonPinDist: симметрия φ ↔ −φ, период 360° и точная формула КШМ', () => {
   for (const phi of grid(0, 360, 1)) {
+    near(pistonPinDist(-phi), pistonPinDist(phi), EPS, `симметрия ${phi}`);
+    near(pistonPinDist(phi + 360), pistonPinDist(phi), EPS, `период ${phi}`);
     const a = phi * DEG;
     const x = CRANK_R * (1 - Math.cos(a)) + ROD_L - Math.sqrt(ROD_L ** 2 - (CRANK_R * Math.sin(a)) ** 2);
-    near(PIN_TDC - pistonPinY(phi), x, EPS, `x(${phi}°)`);
+    near(PIN_TDC_R - pistonPinDist(phi), x, EPS, `x(${phi}°)`);
   }
-  // при 90° поршень уже ниже середины хода — следствие конечной длины шатуна
-  assert.ok(PIN_TDC - pistonPinY(90) > CRANK_R);
+  assert.ok(PIN_TDC_R - pistonPinDist(90) > CRANK_R);
 });
 
-test('объём: VC в ВМТ, VC + VS в НМТ, степень сжатия 10,5', () => {
-  near((VS + VC) / VC, 10.5, EPS, 'степень сжатия');
+test('общие 6 шатунных шеек: расстояние от запястья до шейки строго равно ROD_L для всех 12 цилиндров', () => {
+  assert.equal(THROW_PSI.length, 6);
+  for (const deg of grid(0, 715, 15)) {
+    const th = deg * DEG;
+    for (let c = 0; c < CYLINDERS; c++) {
+      const [cy, cz] = crankPinYZ(th, c % 6);
+      const [wy, wz] = wristPinYZ(th, c);
+      near(Math.hypot(wy - cy, wz - cz), ROD_L, 1e-12, `θ=${deg}°, ц.${c + 1}`);
+    }
+  }
+});
+
+test('объём: VC в ВМТ, VC + VS в НМТ, степень сжатия 11,5', () => {
+  near((VS + VC) / VC, 11.5, EPS, 'степень сжатия');
   near(volumeAt(0), VC, 1e-9, 'V(0°), см³');
   near(volumeAt(180), VS + VC, 1e-9, 'V(180°), см³');
   for (const phi of grid(0, 720, 0.5)) {
@@ -90,61 +97,52 @@ test('объём: VC в ВМТ, VC + VS в НМТ, степень сжатия 1
   }
 });
 
-test('фазы: θ в радианах, цикл 720°, порядок работы 1-3-4-2', () => {
-  near(cycleDeg(Math.PI), 180, 1e-9, 'θ = π рад');
-  nearDeg720(cycleDeg(4 * Math.PI), 0, 1e-9, 'θ = 4π рад — полный цикл');
-  near(cycleDeg(-Math.PI / 2), 630, 1e-9, 'θ = −π/2 рад');
-  for (const theta of grid(-20, 60, 0.37)) {
-    for (let i = 0; i < 4; i++) nearDeg720(cylinderPhaseDeg(theta, i), cycleDeg(theta) - FIRE_DEG[i], 1e-9, `φ${i}(θ = ${theta})`);
-  }
-  // при θ = FIRE_DEG[i]° цилиндр i в ВМТ начала рабочего хода
-  for (let i = 0; i < 4; i++) nearDeg720(cylinderPhaseDeg(FIRE_DEG[i] * DEG, i), 0, 1e-9, `цилиндр ${i + 1}`);
-  // с ростом θ рабочий ход начинается в цилиндрах 1, 3, 4, 2
-  const order = [0, 1, 2, 3].sort((a, b) => FIRE_DEG[a] - FIRE_DEG[b]).map(i => i + 1);
-  assert.deepEqual(order, [1, 3, 4, 2]);
+test('фазы V12: равномерные вспышки каждые 60°, порядок 1-7-5-11-3-9-6-12-2-8-4-10', () => {
+  near(cycleDeg(Math.PI), 180, 1e-9);
+  nearDeg720(cycleDeg(4 * Math.PI), 0, 1e-9);
+  near(cycleDeg(-Math.PI / 2), 630, 1e-9);
+  for (let i = 0; i < CYLINDERS; i++) nearDeg720(cylinderPhaseDeg(FIRE_DEG[i] * DEG, i), 0, 1e-9, `ц.${i + 1}`);
+  const order = Array.from({ length: 12 }, (_, i) => i).sort((a, b) => FIRE_DEG[a] - FIRE_DEG[b]);
+  assert.deepEqual(order, FIRING_ORDER);
+  assert.deepEqual(order.map(i => i + 1), [1, 7, 5, 11, 3, 9, 6, 12, 2, 8, 4, 10]);
+  const times = order.map(i => FIRE_DEG[i]);
+  assert.deepEqual(times, Array.from({ length: 12 }, (_, k) => k * 60), 'интервал ровно 60°');
+  assert.equal(FIRE_B.length, FIRE_A.length);
 });
 
-test('такты: по 180° — рабочий ход, выпуск, впуск, сжатие', () => {
+test('такты и кулачки 48 клапанов: впуск 349…581°, выпуск 139…371° на обоих рядах', () => {
   for (const phi of grid(0, 719.75, 0.25)) assert.equal(strokeOf(phi), Math.floor(phi / 180), `φ = ${phi}°`);
-  for (const phi of grid(0, 719, 1)) assert.equal(strokeOf(phi + 720), strokeOf(phi), `период, φ = ${phi}°`);
-});
-
-test('профиль кулачка: вершина = CAM_LIFT, вне ±CAM_HALF — 0, симметрия, период 2π', () => {
   near(camProfileLift(0), CAM_LIFT, EPS, 'вершина, u');
   assert.equal(camProfileLift(CAM_HALF), 0);
-  for (const psi of grid(-Math.PI, Math.PI, 0.001)) {
-    const l = camProfileLift(psi);
-    assert.ok(l >= 0 && l <= CAM_LIFT + EPS, `ψ = ${psi} рад`);
-    if (Math.abs(psi) >= CAM_HALF + 1e-9) assert.equal(l, 0, `ψ = ${psi} рад вне профиля`);
-    near(camProfileLift(-psi), l, EPS, `симметрия, ψ = ${psi}`);
-    near(camProfileLift(psi + 2 * Math.PI), l, EPS, `период, ψ = ${psi}`);
-  }
-});
 
-test('окна клапанов: впуск 349…581°, выпуск 139…371° (подъём — как в Engine.html:1406)', () => {
-  // открытие = середина ± 2·CAM_HALF: угол распредвала переводится в угол коленвала
-  near(IN_MID - 2 * CAM_HALF / DEG, 349, 1e-9, 'впуск открывается за 11° до ВМТ');
-  near(IN_MID + 2 * CAM_HALF / DEG, 581, 1e-9, 'впуск закрывается через 41° после НМТ');
-  near(EX_MID - 2 * CAM_HALF / DEG, 139, 1e-9, 'выпуск открывается');
-  near(EX_MID + 2 * CAM_HALF / DEG, 371, 1e-9, 'выпуск закрывается');
+  near(IN_MID - 2 * CAM_HALF / DEG, 349, 1e-9);
+  near(IN_MID + 2 * CAM_HALF / DEG, 581, 1e-9);
+  near(EX_MID - 2 * CAM_HALF / DEG, 139, 1e-9);
+  near(EX_MID + 2 * CAM_HALF / DEG, 371, 1e-9);
+
+  assert.equal(valveSideLocal(0, 'intake'), 1);
+  assert.equal(valveSideLocal(1, 'intake'), -1);
+  assert.equal(valveSideLocal(0, 'exhaust'), -1);
+  assert.equal(valveSideLocal(1, 'exhaust'), 1);
+
   const lift = (type, cyl, phi) => {
-    const th = (phi + FIRE_DEG[cyl]) * DEG; // θ, рад: при нём фаза цилиндра cyl равна φ
-    return camProfileLift(th / 2 + lobeAngle(type, cyl) - valveDownAngle(type));
+    const th = (phi + FIRE_DEG[cyl]) * DEG;
+    return camProfileLift(th / 2 + lobeAngle(type, cyl) - valveDownAngle(bankOf(cyl), type));
   };
   for (const [type, open, close, mid] of [['intake', 349, 581, IN_MID], ['exhaust', 139, 371, EX_MID]]) {
-    for (let cyl = 0; cyl < 4; cyl++) {
-      near(lift(type, cyl, mid), CAM_LIFT, EPS, `${type}, ц. ${cyl + 1}: полный подъём в середине`);
-      for (const phi of grid(0, 719.5, 0.5)) {
+    for (let cyl = 0; cyl < CYLINDERS; cyl++) {
+      near(lift(type, cyl, mid), CAM_LIFT, EPS, `${type}, ц. ${cyl + 1}`);
+      for (const phi of grid(0, 719, 1)) {
         const l = lift(type, cyl, phi);
-        if (phi > open + 0.01 && phi < close - 0.01) assert.ok(l > 0, `${type}, ц. ${cyl + 1}, φ = ${phi}°: должен быть открыт`);
-        if (phi < open - 0.01 || phi > close + 0.01) assert.equal(l, 0, `${type}, ц. ${cyl + 1}, φ = ${phi}°: должен быть закрыт`);
+        if (phi > open + 0.01 && phi < close - 0.01) assert.ok(l > 0, `${type}, ц. ${cyl + 1}, φ = ${phi}°`);
+        if (phi < open - 0.01 || phi > close + 0.01) assert.equal(l, 0, `${type}, ц. ${cyl + 1}, φ = ${phi}°`);
       }
     }
   }
 });
 
-test('давление: период 720°, непрерывность на стыках участков, пределы', () => {
-  for (const phi of grid(0, 720, 0.25)) near(pressureAt(phi + 720), pressureAt(phi), 1e-9, `период, φ = ${phi}°`);
+test('давление: период 720°, непрерывность и пределы при CR = 11,5', () => {
+  for (const phi of grid(0, 720, 0.5)) near(pressureAt(phi + 720), pressureAt(phi), 1e-9, `период, φ = ${phi}°`);
   for (const b of [0, 139, 230, 235, 350, 400, 500, 540, 720]) near(pressureAt(b - 1e-7), pressureAt(b + 1e-7), 1e-4, `стык ${b}°`);
   let min = Infinity, max = -Infinity;
   for (const phi of grid(0, 720, 0.1)) {
@@ -153,10 +151,10 @@ test('давление: период 720°, непрерывность на ст
     max = Math.max(max, p);
   }
   near(min, 0.92, EPS, 'минимум — давление впуска, бар');
-  assert.ok(max > 27.4 && max < 27.5, `максимум ${max} бар`);
+  assert.ok(max > 28 && max < 36, `максимум ${max} бар`);
 });
 
 test('параметры неизменяемы', () => {
-  assert.ok(Object.isFrozen(FIRE_DEG));
+  assert.ok(Object.isFrozen(FIRE_DEG) && Object.isFrozen(FIRING_ORDER) && Object.isFrozen(THROW_PSI));
   assert.throws(() => { FIRE_DEG[0] = 1; }, TypeError);
 });

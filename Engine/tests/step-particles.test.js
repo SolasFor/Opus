@@ -24,7 +24,7 @@ import { smooth } from '../src/sim/math.js';
 
 const OLD_WRAP = '    if (p.s > 1) p.s -= 1; else if (p.s < 0) p.s += 1;';
 const NEW_WRAP = '    if (p.s > 1 || p.s < 0) p.s -= Math.floor(p.s);   // one frame can move a particle by more than one period (|dPhi| <= 90°)';
-const FILES = ['../Engine.html', '../src/render/effects/strokes.js'];
+const FILES = ['../src/render/effects/strokes.js'];
 
 // Текст function stepParticles: от объявления с начала строки до строки, где скобки { } уравновешиваются.
 function extract(file) {
@@ -92,7 +92,7 @@ for (const file of FILES) {
 }
 
 test('прежний перенос на тех же входах падает с TypeError: тест воспроизводит дефект', () => {
-  const old = build(withOldWrap(extract('../Engine.html')));
+  const old = build(withOldWrap(extract('../src/render/effects/strokes.js')));
   let thrown = 0;
   for (const k of KS) for (const dPhi of DPHI_LARGE) {
     try { old(cloud(), [1, 1], dPhi, k, 1); } catch (e) { assert.ok(e instanceof TypeError, String(e)); thrown++; }

@@ -1,57 +1,97 @@
-/* Деталь «Впускной коллектор»: buildIntake(); пути газа впуска и выпуска intakePaths и exhaustPaths.
- * M-02b: подраздел 6.8 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
- * проверяет tests/split-sync.test.js.
- * M-07b: по прототипу M-07: рёбра ресивера, литой дроссельный узел с приводом и болтами, гофрированный патрубок
- * с хомутом, общий фланец с болтами, топливная рампа с форсунками. Осевые линии труб и пути частиц прежние.
- * M-07c: трубы — G.tube (на уровне «низкий» вдвое меньше сегментов).
+/* Деталь «Впускной коллектор V12 и топливная система»: buildIntake().
+ * Два карбоновых ресивера (2×2 twill), парные дроссельные заслонки 76 мм,
+ * 12 равнодлинных патрубков с золочёными раструбами, 12 форсунок и анодированные топливные рампы.
  */
 import * as THREE from 'three';
-import { CYL_X, V3 } from '../world.js';
+import { bankOf, bankSign } from '../../config/engine-spec.js';
+import { CYL_X, HEAD_BOT_R, bankPoint, bankQuat } from '../world.js';
 import { M } from '../materials.js';
 import { G, Parts } from './geometry.js';
 
-/* ---------- 6.8 INTAKE MANIFOLD ---------- */
-const intakePaths = [], exhaustPaths = [];
-const PLEN = { y: 3.48, z: -2.05, r: 0.30, x0: -2.15, x1: 2.15 };
+const intakePaths = [];
+
 function buildIntake(g) {
+  intakePaths.length = 0;
   const P = new Parts();
-  P.add(G.cylX(PLEN.r, PLEN.x1 - PLEN.x0, 48), M.plastic, [(PLEN.x0 + PLEN.x1) / 2, PLEN.y, PLEN.z]);
-  // moulded ribs and mounting bosses on the plenum
-  for (let k = 0; k < 6; k++) P.add(G.torusX(PLEN.r, 0.014, 6, 48), M.plastic, [PLEN.x0 + 0.42 + k * 0.67, PLEN.y, PLEN.z]);
-  P.add(G.rbox(PLEN.x1 - PLEN.x0 - 0.2, 0.035, 0.05, 0.015), M.plastic, [0, PLEN.y + PLEN.r + 0.01, PLEN.z]);
-  P.add(new THREE.SphereGeometry(PLEN.r, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateZ(-Math.PI / 2), M.plastic, [PLEN.x1, PLEN.y, PLEN.z], null, [0.4, 1, 1]);
-  [PLEN.x0 + 0.1, 0, PLEN.x1 - 0.1].forEach(x => P.add(G.torusX(PLEN.r + 0.005, 0.02, 8, 48), M.plastic, [x, PLEN.y, PLEN.z]));
-  // throttle body (cast, machined flanges, motor housing) + rubber intake boot
-  P.add(G.latheX([[0, 0], [0.27, 0], [0.27, 0.05], [0.22, 0.05], [0.22, 0.25], [0.25, 0.25], [0.25, 0.30], [0, 0.30]], 40).rotateZ(Math.PI), M.aluCast, [PLEN.x0 + 0.0, PLEN.y, PLEN.z]);
-  P.add(G.rbox(0.20, 0.17, 0.14, 0.03), M.paintBlack, [PLEN.x0 - 0.15, PLEN.y + 0.24, PLEN.z - 0.02]);
-  P.add(G.rbox(0.07, 0.10, 0.05, 0.012), M.paintBlack, [PLEN.x0 - 0.15, PLEN.y + 0.22, PLEN.z + 0.24]);
-  [[0.17, 0.17], [-0.17, 0.17], [0.17, -0.17], [-0.17, -0.17]].forEach(([dy, dz]) => P.bolt(M.bolt, [PLEN.x0 - 0.05, PLEN.y + dy, PLEN.z + dz], '-x', 0.025, 0.025));
-  P.add(G.latheX([[0, 0], [0.20, 0], [0.205, 0.04], [0.21, 0.06, 1], [0.225, 0.08, 1], [0.21, 0.10, 1], [0.225, 0.12, 1], [0.21, 0.14, 1], [0.225, 0.16, 1],
-    [0.21, 0.18, 1], [0.225, 0.20, 1], [0.21, 0.22, 1], [0.20, 0.30], [0.21, 0.32], [0.21, 0.37], [0.18, 0.37], [0, 0.37]], 40).rotateZ(Math.PI), M.rubber, [PLEN.x0 - 0.30, PLEN.y, PLEN.z]);
-  P.add(G.torusX(0.212, 0.014, 6, 32), M.fitting, [PLEN.x0 - 0.33, PLEN.y, PLEN.z]);
-  // common runner flange with bolts, fuel rail with injectors
-  P.add(G.rbox(4.10, 0.40, 0.07, 0.025), M.aluCast, [0, 2.95, -1.05]);
-  [-1.95, -1.1, 0, 1.1, 1.95].forEach(x => [-0.14, 0.14].forEach(dy => P.bolt(M.bolt, [x, 2.95 + dy, -1.085], '-z', 0.032, 0.03)));
-  P.add(G.rbox(3.70, 0.075, 0.075, 0.02), M.fitting, [0, 3.42, -1.22]);
-  P.add(G.cylX(0.03, 0.30, 16), M.fitting, [-2.0, 3.42, -1.22]);
-  [-1.1, 1.1].forEach(x => { P.add(G.rbox(0.06, 0.30, 0.16, 0.012), M.aluCast, [x, 3.27, -1.16]); P.bolt(M.bolt, [x, 3.46, -1.22], 'y', 0.025, 0.02); });
-  CYL_X.forEach((x, i) => {
-    const pts = [V3(x, PLEN.y - 0.05, PLEN.z + 0.15), V3(x, 3.30, -1.75), V3(x, 3.06, -1.42), V3(x, 2.96, -1.06)];
-    P.add(G.tube(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 40, 0.13, 24), M.plastic);
-    P.add(G.latheZ([[0, 0], [0.16, 0], [0.16, 0.04], [0.135, 0.05], [0, 0.05]], 32), M.plastic, [x, 2.955, -1.135]);
-    // injector: O-ring, body, connector
-    P.add(G.lathe([[0, 0], [0.028, 0], [0.028, 0.06], [0.04, 0.07], [0.045, 0.16, 1], [0.05, 0.19], [0.05, 0.25], [0.036, 0.26], [0, 0.26]], 20), M.paintBlack, [x, 3.13, -1.22]);
-    P.add(G.torusY(0.03, 0.008, 6, 16), M.rubber, [x, 3.15, -1.22]);
-    P.add(G.rbox(0.07, 0.06, 0.09, 0.012), M.paintBlack, [x, 3.33, -1.30]);
-    // particle path: snorkel → plenum → runner → port → valve throat → chamber
-    const path = [V3(PLEN.x0 - 0.75, PLEN.y, PLEN.z), V3(PLEN.x0 - 0.2, PLEN.y, PLEN.z)];
-    for (let px = PLEN.x0 + 0.3; px < x - 0.25; px += 0.5) path.push(V3(px, PLEN.y, PLEN.z));
-    path.push(V3(x, PLEN.y + 0.02, PLEN.z + 0.02), V3(x, 3.30, -1.75), V3(x, 3.06, -1.42), V3(x, 2.95, -1.0),
-      V3(x, 2.80, -0.58), V3(x, 2.60, -0.27), V3(x, 2.34, -0.08));
-    intakePaths[i] = new THREE.CatmullRomCurve3(path, false, 'centripetal');
-  });
+
+  // продольные карбоновые ресиверы над развалом V (ряд A: −Z, ряд B: +Z)
+  for (let b = 0; b < 2; b++) {
+    const ins = -bankSign(b);
+    const plZ = b === 0 ? -0.52 : 0.52;
+    const plY = 4.02;
+
+    // основной цилиндрический ресивер с конусным сужением к дросселю и заглушкой сзади
+    const plProf = [
+      [0, -2.92], [0.22, -2.90, 1], [0.29, -2.68, 1],
+      [0.29,  2.72], [0.21,  2.96, 1], [0,  2.98]
+    ];
+    P.add(G.latheX(plProf, 36), M.carbonWeave, [0, plY, plZ]);
+    // хомуты и поперечный балансировочный мост между двумя ресиверами
+    [-2.40, -0.80, 0.80, 2.40].forEach(rx => P.add(G.torusX(0.295, 0.014, 8, 28), M.aluMach, [rx, plY, plZ]));
+
+    // корпус дроссельной заслонки 76 мм + латунная заслонка + входной патрубок
+    P.add(G.cylX(0.21, 0.14, 24), M.aluMach, [3.02, plY, plZ]);
+    P.add(G.cylX(0.18, 0.28, 24), M.aluDark, [3.22, plY, plZ]);
+    P.add(G.cylX(0.165, 0.015, 24), M.brass, [3.22, plY, plZ], [0, 0.45, 0]);
+    P.add(G.cylX(0.195, 0.16, 24), M.rubber, [3.40, plY, plZ]);
+    P.add(G.torusX(0.205, 0.010, 6, 24), M.chrome, [3.34, plY, plZ]);
+    P.add(G.torusX(0.205, 0.010, 6, 24), M.chrome, [3.46, plY, plZ]);
+    P.add(G.cyl(0.06, 0.06, 0.14, 16), M.dark, [3.22, plY + 0.21, plZ]);
+
+    // топливная рампа с регулятором давления и AN-фитингами
+    const fpRail = bankPoint(b, 0, HEAD_BOT_R + 0.78, ins * 0.94);
+    P.add(G.rbox(5.68, 0.085, 0.095, 0.025), M.anodizedBlue, [0, fpRail.y, fpRail.z]);
+    P.add(G.cylX(0.062, 0.10, 16), M.anodizedRed, [2.90, fpRail.y, fpRail.z]);
+    P.add(G.cylX(0.062, 0.10, 16), M.anodizedRed, [-2.90, fpRail.y, fpRail.z]);
+  }
+
+  // центральная карбоновая Y-перемычка, объединяющая впуск спереди, и балансировочные трубки
+  P.add(G.rbox(0.32, 0.16, 0.84, 0.05), M.carbonWeave, [3.54, 4.02, 0]);
+  P.add(G.cylX(0.22, 0.26, 28), M.aluMach, [3.74, 4.02, 0]);
+  [-1.60, 0, 1.60].forEach(bx => P.add(G.cylZ(0.065, 0.62, 18), M.aluMach, [bx, 4.02, 0]));
+  // задняя армированная перемычка топливных рамп
+  const ra = bankPoint(0, -2.92, HEAD_BOT_R + 0.78, 0.94);
+  const rb = bankPoint(1, -2.92, HEAD_BOT_R + 0.78, -0.94);
+  P.add(G.tube(new THREE.CatmullRomCurve3([
+    new THREE.Vector3(ra.x, ra.y, ra.z),
+    new THREE.Vector3(-3.08, ra.y + 0.12, 0),
+    new THREE.Vector3(rb.x, rb.y, rb.z)
+  ]), 16, 0.026, 8), M.pipe);
+
+  // 12 впускных раннеров + золочёные фланцы ресивера + 12 топливных форсунок
+  const flQ = [bankQuat(0), bankQuat(1)];
+  for (let c = 0; c < 12; c++) {
+    const b = bankOf(c);
+    const ins = -bankSign(b);
+    const plZ = b === 0 ? -0.52 : 0.52;
+    const cx = CYL_X[c];
+
+    const pPort = bankPoint(b, cx, HEAD_BOT_R + 0.52, ins * 0.79);
+    const pMid  = bankPoint(b, cx, HEAD_BOT_R + 0.80, ins * 1.12);
+    const pPlen = new THREE.Vector3(cx, 3.80, plZ);
+    const pTop  = new THREE.Vector3(cx, 4.02, plZ);
+    const pCyl  = bankPoint(b, cx, HEAD_BOT_R + 0.30, ins * 0.28);
+
+    // изогнутый патрубок + фланцы и уплотнительная кольцевая манжета
+    P.add(G.tube(new THREE.CatmullRomCurve3([pPort, pMid, pPlen]), 16, 0.125, 16), M.aluCast);
+    P.add(G.cyl(0.148, 0.148, 0.055, 20), M.gold, [cx, 3.79, plZ]);
+    const e = new THREE.Euler().setFromQuaternion(flQ[b]);
+    P.add(G.rbox(0.42, 0.28, 0.06, 0.03), M.aluMach, [pPort.x, pPort.y, pPort.z], [e.x, e.y, e.z]);
+
+    // топливная форсунка от рампы в впускной канал
+    const pRail = bankPoint(b, cx, HEAD_BOT_R + 0.78, ins * 0.94);
+    const pInjEnd = bankPoint(b, cx, HEAD_BOT_R + 0.52, ins * 0.82);
+    const dir = pInjEnd.clone().sub(pRail);
+    const iq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    const ie = new THREE.Euler().setFromQuaternion(iq);
+    const midInj = pRail.clone().addScaledVector(dir, 0.5);
+    P.add(G.cyl(0.032, 0.026, dir.length(), 14), M.anodizedBlue, [midInj.x, midInj.y, midInj.z], [ie.x, ie.y, ie.z]);
+
+    intakePaths[c] = new THREE.CatmullRomCurve3([pTop, pPlen, pMid, pPort, pCyl]);
+  }
+
   P.build(g, g);
-  g.userData.anchor.set(-0.6, PLEN.y + 0.35, PLEN.z);
+  g.userData.anchor.set(0.3, 4.30, 0.55);
 }
 
-export { intakePaths, exhaustPaths, buildIntake };
+export { intakePaths, buildIntake };

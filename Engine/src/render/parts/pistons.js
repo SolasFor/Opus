@@ -1,42 +1,45 @@
-/* Деталь «Поршни»: buildPistons().
- * M-02b: подраздел 6.4 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
- * проверяет tests/split-sync.test.js.
- * M-07c: по прототипу M-07 в тех же размерах: точёный поршень — купол с нагаром, канавки с кольцами (два
- * компрессионных, маслосъёмное из двух дисков), юбка «слиппер» по сторонам упора с открытыми бобышками пальца,
- * стопорные кольца пальца (материал колец).
+/* Деталь «Поршни с кольцами (12 шт.)»: buildPistons().
+ * По 6 кованых поршней со скошенной юбкой в каждом ряду V12 (BORE_R = 0.44, корпус 0.415, кольца 0.433).
  */
+import * as THREE from 'three';
+import { CRANK_Y, bankAngle } from '../../config/engine-spec.js';
 import { M } from '../materials.js';
-import { G, Parts } from './geometry.js';
+import { G, Parts, registerLocalPart } from './geometry.js';
 
-/* ---------- 6.4 PISTONS (InstancedMesh ×4) ---------- */
-let pistonMeshes = [];
-const RING = [[0.162, 0.192], [0.110, 0.140], [0.0425, 0.0875]];   // канавки колец: [низ, верх] от оси пальца
-function buildPistons(g) {
+let pistonMeshesA = [], pistonMeshesB = [];
+const RING = [[0.168, 0.198], [0.114, 0.144], [0.044, 0.090]];
+
+function buildPistonParts(parent, g) {
   const P = new Parts();
-  // crown + ring belt (origin at the pin axis)
-  const pr = [[0, 0.11], [0.26, 0.085, 1], [0.37, 0.02], [0.40, 0.02]];
-  RING.slice().reverse().forEach(([a, b]) => pr.push([0.40, a], [0.372, a], [0.372, b], [0.40, b]));
-  pr.push([0.40, 0.212], [0.396, 0.226, 1], [0.37, 0.234, 1], [0.25, 0.241, 1], [0, 0.245, 1]);
-  P.add(G.lathe(pr, 48), M.piston);
-  P.add(G.cyl(0.29, 0.30, 0.006, 40), M.soot, [0, 0.2425, 0]);                // carbon on the crown, top 0.2455
-  // rings: compression ×2, oil ring (two rails)
+  const pr = [[0, 0.11], [0.27, 0.085, 1], [0.385, 0.02], [0.415, 0.02]];
+  RING.slice().reverse().forEach(([a, b]) => pr.push([0.415, a], [0.386, a], [0.386, b], [0.415, b]));
+  pr.push([0.415, 0.218], [0.410, 0.232, 1], [0.385, 0.240, 1], [0.26, 0.247, 1], [0, 0.250, 1]);
+  P.add(G.lathe(pr, 44), M.piston);
+  P.add(G.cyl(0.30, 0.31, 0.006, 36), M.soot, [0, 0.248, 0]);
   RING.forEach(([a, b], i) => {
-    const ro = 0.418, ri = 0.374;
-    if (i < 2) P.add(G.lathe([[ri, a + 0.002], [ro, a + 0.002], [ro, b - 0.002], [ri, b - 0.002]], 48), M.rings);
-    else [a + 0.002, b - 0.012].forEach(y => P.add(G.lathe([[ri, y], [ro, y], [ro, y + 0.01], [ri, y + 0.01]], 48), M.rings));
+    const ro = 0.433, ri = 0.388;
+    if (i < 2) P.add(G.lathe([[ri, a + 0.002], [ro, a + 0.002], [ro, b - 0.002], [ri, b - 0.002]], 44), M.rings);
+    else [a + 0.002, b - 0.012].forEach(y => P.add(G.lathe([[ri, y], [ro, y], [ro, y + 0.01], [ri, y + 0.01]], 44), M.rings));
   });
-  // slipper skirt on the thrust sides (±z), open at the pin bosses (±x)
-  const sk = [[0.372, -0.35], [0.398, -0.35], [0.398, 0.021], [0.372, 0.021], [0.372, -0.35]];
-  [-0.95, Math.PI - 0.95].forEach(p0 => P.add(G.lathe(sk, 20, p0, 1.9), M.piston));
-  // pin bosses + struts to the crown, circlips
+  const sk = [[0.386, -0.34], [0.412, -0.34], [0.412, 0.021], [0.386, 0.021], [0.386, -0.34]];
+  [-0.95, Math.PI - 0.95].forEach(p0 => P.add(G.lathe(sk, 18, p0, 1.9), M.piston));
   [-1, 1].forEach(sx => {
-    P.add(G.cylX(0.12, 0.09, 24), M.piston, [sx * 0.29, 0, 0]);
-    P.add(G.rbox(0.09, 0.14, 0.24, 0.03), M.piston, [sx * 0.29, 0.06, 0]);
-    P.add(G.cylX(0.088, 0.012, 20), M.rings, [sx * 0.345, 0, 0]);
+    P.add(G.cylX(0.12, 0.09, 22), M.piston, [sx * 0.30, 0, 0]);
+    P.add(G.rbox(0.09, 0.14, 0.24, 0.03), M.piston, [sx * 0.30, 0.06, 0]);
+    P.add(G.cylX(0.088, 0.012, 18), M.rings, [sx * 0.355, 0, 0]);
   });
-  P.add(G.cylX(0.085, 0.68, 24), M.chrome, [0, 0, 0]);
-  pistonMeshes = P.instanced(g, g, 4);
-  g.userData.anchor.set(-0.55, 2.4, 0.4);
+  P.add(G.cylX(0.085, 0.70, 22), M.chrome, [0, 0, 0]);
+  return P.instanced(parent, g, 6);
 }
 
-export { pistonMeshes, buildPistons };
+function buildPistons(g) {
+  const grpA = new THREE.Group(); grpA.rotation.x = bankAngle(0); g.add(grpA);
+  const grpB = new THREE.Group(); grpB.rotation.x = bankAngle(1); g.add(grpB);
+  pistonMeshesA = buildPistonParts(grpA, g);
+  pistonMeshesB = buildPistonParts(grpB, g);
+  registerLocalPart(g, grpA, [0, CRANK_Y, 0], [0, CRANK_Y + 1.86, -1.08]);
+  registerLocalPart(g, grpB, [0, CRANK_Y, 0], [0, CRANK_Y + 1.86, +1.08]);
+  g.userData.anchor.set(-0.595, 2.35, 0.95);
+}
+
+export { pistonMeshesA, pistonMeshesB, buildPistons };

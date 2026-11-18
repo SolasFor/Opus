@@ -7,7 +7,7 @@
  * aria-valuetext ползунка. Сегмент «Вид» — радиогруппа с перемещаемым tabindex: в порядке Tab стоит только выбранный
  * вид, стрелки выбирают соседний (ui/input.js).
  */
-import { V3 } from '../render/world.js';
+import { THROW_X, V3 } from '../render/world.js';
 import { camera, controls, cutPlane, CAP } from '../render/scene.js';
 import { ui, el } from './state.js';
 import { boundsWith } from './explode.js';
@@ -21,14 +21,16 @@ function setView(mode) {
   cutPlane.constant = mode === 'cut' ? ui.cutZ : 100;
   document.querySelectorAll('#viewSeg button').forEach(b => { const on = b.dataset.mode === mode; b.classList.toggle('act', on); b.setAttribute('aria-checked', on); b.tabIndex = on ? 0 : -1; });
   el.cutRow.classList.toggle('open', mode === 'cut');
-  if (mode === 'cut' && camera.position.z - controls.target.z < 0.5) frameBox(boundsWith({}), 1.1, 0, V3(0.55, 0.32, 1));
+  if (mode === 'cut' && camera.position.x - controls.target.x < 0.8) frameBox(boundsWith({}), 1.1, 0, V3(1, 0.42, 0.72));
 }
 function cycleView() { setView(ui.view === 'solid' ? 'xray' : ui.view === 'xray' ? 'cut' : 'solid'); }
 function setCut(v) {
-  ui.cutZ = -0.75 + 1.8 * v / 100;
+  ui.cutZ = -3.2 + 6.4 * v / 100;
   if (ui.view === 'cut') cutPlane.constant = ui.cutZ;
   el.cutSlider.style.setProperty('--p', v + '%');
-  const t = Math.abs(ui.cutZ) < 0.05 ? S.cutAxis : S.cutOff(Math.round(ui.cutZ * 100));
+  let bestT = 0, bestD = 1e9;
+  for (let i = 0; i < THROW_X.length; i++) { const d = Math.abs(ui.cutZ - THROW_X[i]); if (d < bestD) { bestD = d; bestT = i; } }
+  const t = bestD < 0.16 ? S.cutCyls(bestT + 1, bestT + 7) : Math.abs(ui.cutZ) < 0.06 ? S.cutAxis : S.cutOff(Math.round(ui.cutZ * 100));
   el.cutVal.textContent = t;
   el.cutSlider.setAttribute('aria-valuetext', t);
 }

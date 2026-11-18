@@ -1,25 +1,18 @@
 /**
- * M-05b: шкала тактов «Фаз цилиндров» и ленты времени (src/ui/phase-scale.js) согласована с моделью:
- *   1) отрезки тактов цилиндра покрывают 0–720° без пропусков и наложений, такт под каждым углом — strokeOf(φ),
- *      φ = cylinderPhaseDeg (как в прежней диаграмме на canvas и в sim/cycle.js);
- *   2) номера тактов: 1 впуск, 2 сжатие, 3 рабочий ход, 4 выпуск (П-10);
- *   3) метки ВМТ и НМТ стоят там, где поршень выбранного цилиндра в ВМТ и НМТ (sim/kinematics.js);
- *   4) искра — за SPARK_ADV° до начала рабочего хода;
- *   5) классы, которые создаёт ui/phases.js, описаны в styles/app.css и не заняты разметкой index.html
- *      (иначе стили компонентов смешиваются).
+ * M-05b / V12: шкала тактов «Фаз цилиндров» и ленты времени для 12 цилиндров (src/ui/phase-scale.js).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { DEG, FIRE_DEG, SPARK_ADV } from '../src/config/engine-spec.js';
+import { DEG, CYLINDERS, FIRE_DEG, SPARK_ADV } from '../src/config/engine-spec.js';
 import { cylinderPhaseDeg, strokeOf } from '../src/sim/cycle.js';
-import { pistonPinY, PIN_TDC, PIN_BDC } from '../src/sim/kinematics.js';
+import { pistonPinDist, PIN_TDC_R, PIN_BDC_R } from '../src/sim/kinematics.js';
 import { STROKE_NUM, STROKE_CLS, pctOf, strokeSpans, deadCentres, sparkAt } from '../src/ui/phase-scale.js';
 
 const near = (a, b, e = 1e-9) => Math.abs(a - b) < e;
 
-test('отрезки тактов: покрывают 0–720° ровно один раз, такт под углом совпадает со strokeOf(φ)', () => {
-  for (let i = 0; i < 4; i++) {
+test('отрезки тактов V12: 12 цилиндров покрывают 0–720° без пропусков и наложений', () => {
+  for (let i = 0; i < CYLINDERS; i++) {
     const all = [0, 1, 2, 3].flatMap(k => strokeSpans(i, k).map(([a, b]) => ({ a, b, k })));
     assert.equal(all.reduce((s, x) => s + x.b - x.a, 0), 720, `Ц${i + 1}: сумма отрезков`);
     for (let d = 0.5; d < 720; d += 1) {
@@ -31,36 +24,34 @@ test('отрезки тактов: покрывают 0–720° ровно од�
 });
 
 test('номера и классы тактов: 1 впуск, 2 сжатие, 3 рабочий ход, 4 выпуск', () => {
-  // индексы STROKES: 0 рабочий ход, 1 выпуск, 2 впуск, 3 сжатие (sim/cycle.js, strokeOf)
   assert.deepEqual(STROKE_NUM, [3, 4, 1, 2]);
   assert.deepEqual(STROKE_CLS, ['s-po', 's-ex', 's-in', 's-co']);
   assert.equal(pctOf(360), '50%');
   assert.equal(pctOf(100), '13.889%');
 });
 
-test('ВМТ и НМТ: поршень цилиндра в верхней и нижней мёртвой точке', () => {
-  for (let i = 0; i < 4; i++) {
+test('ВМТ и НМТ: поршень каждого из 12 цилиндров в верхней и нижней мёртвой точке', () => {
+  for (let i = 0; i < CYLINDERS; i++) {
     const marks = deadCentres(i);
     assert.deepEqual(marks.map(m => m.deg), [...marks.map(m => m.deg)].sort((a, b) => a - b));
     assert.ok(marks.length >= 4 && marks.every(m => m.deg >= 0 && m.deg <= 720));
-    // FIRE_DEG кратны 180°: границы тактов на 0, 180, 360, 540 и 720° — шкала закрыта с обеих сторон
-    assert.deepEqual(marks.map(m => m.deg), [0, 180, 360, 540, 720], `Ц${i + 1}`);
-    assert.equal(marks[0].name, marks[4].name, `Ц${i + 1}: 0° и 720° — одна и та же мёртвая точка`);
+    assert.equal(marks.length, FIRE_DEG[i] % 180 === 0 ? 5 : 4, `Ц${i + 1}`);
     for (const m of marks) {
-      const y = pistonPinY(cylinderPhaseDeg(m.deg * DEG, i));
-      assert.ok(near(y, m.name === 'ВМТ' ? PIN_TDC : PIN_BDC, 1e-6), `Ц${i + 1}, ${m.deg}° — ${m.name}: y = ${y}`);
+      const r = pistonPinDist(cylinderPhaseDeg(m.deg * DEG, i));
+      assert.ok(near(r, m.name === 'ВМТ' ? PIN_TDC_R : PIN_BDC_R, 1e-6), `Ц${i + 1}, ${m.deg}° — ${m.name}: r = ${r}`);
     }
   }
 });
 
-test('искра — за SPARK_ADV° до рабочего хода', () => {
-  for (let i = 0; i < 4; i++) {
+test('искра — за SPARK_ADV° до рабочего хода для всех 12 цилиндров', () => {
+  for (let i = 0; i < CYLINDERS; i++) {
     const s = sparkAt(i);
     assert.ok(s >= 0 && s < 720);
     assert.ok(near(cylinderPhaseDeg((s + SPARK_ADV) * DEG, i), 0, 1e-6) || near(cylinderPhaseDeg((s + SPARK_ADV) * DEG, i), 720, 1e-6), `Ц${i + 1}`);
     assert.equal(strokeOf(cylinderPhaseDeg(s * DEG, i)), 3, `Ц${i + 1}: искра в конце сжатия`);
   }
-  assert.deepEqual(FIRE_DEG.map((_, i) => sparkAt(i)), [710, 530, 170, 350]);
+  const sparks = FIRE_DEG.map((_, i) => sparkAt(i));
+  assert.equal(new Set(sparks).size, 12, 'у каждого из 12 цилиндров свой угол зажигания');
 });
 
 test('классы строк «Фаз» и полос ленты: есть в app.css, не заняты разметкой index.html', () => {

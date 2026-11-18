@@ -23,7 +23,7 @@ function pick() {
     if (!n || !h.object.visible) continue;
     if (ui.isolated && ui.isolated !== n) continue;
     const m = h.object.material;
-    if (m.userData.housing && ui.view === 'cut' && h.point.z > cutPlane.constant) continue;   // clipped away
+    if (m.userData.housing && ui.view === 'cut' && cutPlane.distanceToPoint(h.point) < 0) continue;   // clipped away
     if (n.userData.housing && ui.view === 'xray') { if (!glass) glass = n; continue; }
     return n;
   }

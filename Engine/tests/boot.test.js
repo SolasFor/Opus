@@ -118,12 +118,13 @@ test('первая причина сбоя побеждает; после ready 
   assert.equal(r.view().state, 'ready');
 });
 
-test('file:// — сразу «нужен веб-сервер» и ссылка на Engine.html, без пробного запроса', () => {
+test('file:// — сразу «нужен веб-сервер», без пробного запроса', () => {
   const b = boot({ protocol: 'file:' });
   b.g.__engModuleError();
   const v = b.view();
   assert.equal(v.state, 'failed'); assert.match(v.msg, /только через веб-сервер/); assert.match(v.msg, /python3 -m http\.server/);
-  assert.match(v.act, /<a class="btn accent" href="Engine\.html">Открыть Engine\.html<\/a>/);
+  assert.match(v.act, />Перезагрузить</);
+  assert.doesNotMatch(v.act, /Engine\.html/);
   assert.equal(b.fetches.length, 0);
 });
 
@@ -138,11 +139,11 @@ test('CDN недоступен: пробный HEAD к three из importmap от
   assert.match(v.act, /class="btn accent"[^>]*>Повторить</); assert.doesNotMatch(v.act, /Engine\.html/);
 });
 
-test('CDN доступен: «не загрузились файлы приложения», «Повторить» и Engine.html', async () => {
+test('CDN доступен: «не загрузились файлы приложения» и «Повторить»', async () => {
   const b = boot({ fetchResult: 'ok' });
   b.g.__engModuleError(); await b.flush();
   const v = b.view();
-  assert.match(v.msg, /Не загрузились файлы приложения/); assert.match(v.act, />Повторить</); assert.match(v.act, /href="Engine\.html"/);
+  assert.match(v.msg, /Не загрузились файлы приложения/); assert.match(v.act, />Повторить</); assert.doesNotMatch(v.act, /Engine\.html/);
   b.tick(10000); assert.match(b.view().msg, /файлы приложения/);
 });
 
@@ -157,7 +158,7 @@ const styleFailed = b => {
   const v = b.view();
   assert.equal(v.state, 'failed'); assert.ok(v.err && !v.spinner && v.shown);
   assert.match(v.msg, /<\/b><br>Не загрузились файлы оформления приложения \(<code>styles\/<\/code>\)/);
-  assert.match(v.act, /class="btn accent"[^>]*>Повторить</); assert.match(v.act, /href="Engine\.html"/);
+  assert.match(v.act, /class="btn accent"[^>]*>Повторить</); assert.doesNotMatch(v.act, /Engine\.html/);
   assert.match(b.loader.style.cssText, /^position:fixed;inset:0;z-index:30;display:flex;/); assert.match(b.loader.style.cssText, /background:#0f1115;.*;color-scheme:dark$/);
   assert.equal(b.actEl.style.cssText, 'display:flex;gap:12px;align-items:center');
   assert.equal(b.g.__engFailed, true); assert.equal(b.fetches.length, 0);

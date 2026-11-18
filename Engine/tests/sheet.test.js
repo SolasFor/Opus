@@ -122,7 +122,7 @@ test('вкладки шторки: tablist, aria-controls ↔ tabpanel, выбр
     assert.match(sheet, new RegExp(`id="pane-${m[1]}" role="tabpanel" aria-labelledby="tab-${m[1]}"${i ? ' hidden' : ''}>`));
   });
   assert.match(sheet, /<button class="sheet-handle" id="sheetHandle" type="button" aria-controls="sheetBody" aria-expanded="false" aria-label="Развернуть шторку">/);
-  assert.match(sheet, /id="fireMini" aria-hidden="true"><i data-c="0">1<\/i><i data-c="2">3<\/i><i data-c="3">4<\/i><i data-c="1">2<\/i><\/div>/);
+  assert.match(sheet, /id="fireMini" aria-hidden="true"><i data-c="0">1<\/i><i data-c="6">7<\/i><i data-c="4">5<\/i><i data-c="10">11<\/i><i data-c="2">3<\/i><i data-c="8">9<\/i><i data-c="5">6<\/i><i data-c="11">12<\/i><i data-c="1">2<\/i><i data-c="7">8<\/i><i data-c="3">4<\/i><i data-c="9">10<\/i><\/div>/);
   assert.match(BODY, /id="sheetToggle" aria-keyshortcuts="H" type="button" aria-controls="sheet" aria-pressed="true" aria-label="Панель управления"/);
 });
 

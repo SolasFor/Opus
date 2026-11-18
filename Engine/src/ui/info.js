@@ -7,12 +7,13 @@
  * после числа. Блок «Сейчас» обновляется не чаще 10 раз в секунду (раз в 120 мс) и только при изменении текста;
  * aria-live у него выключен (в разметке), чтобы диктор не зачитывал каждое изменение.
  */
-import { DEG, FIRE_DEG, CRANK_R, ROD_L, CAM_LIFT, SPARK_ADV } from '../config/engine-spec.js';
+import { DEG, CYLINDERS, FIRE_DEG, CRANK_R, ROD_L, CAM_LIFT, SPARK_ADV } from '../config/engine-spec.js';
 import { mod } from '../sim/math.js';
 import { strokeOf } from '../sim/cycle.js';
-import { PIN_TDC } from '../sim/kinematics.js';
+import { PIN_TDC_R } from '../sim/kinematics.js';
 import { volumeAt, pressureAt } from '../sim/thermo.js';
-import { R_CRANK_SPR, IDLER, BASE_RPM, STROKES } from '../render/world.js';
+import { R_CRANK_SPR, BASE_RPM, STROKES } from '../render/world.js';
+import { TIMING_TENS_R } from '../render/drive.js';
 import { sim, cycDeg, phaseOf } from '../render/kinematics.js';
 import { ui, effSpeed, el } from './state.js';
 import { revealPanel, setSection } from './layout.js';
@@ -38,21 +39,23 @@ function openInfo(node) {
   el.cycle.scrollTop = 0;                   // карточка — первый раздел панели: видна с заголовком и кнопкой ×
 }
 function closeInfo() { el.infocard.classList.remove('open'); el.infoLive.textContent = ''; liveHtml = ''; }
+const ALL_CYL = Array.from({ length: CYLINDERS }, (_, i) => i);
 function liveRows(key) {
   const c = ui.pvCyl, phi = phaseOf(c), st = STROKES[strokeOf(phi)].name;
   const rpm = Math.round(effSpeed() * BASE_RPM * (sim.running ? 1 : 0));
-  const xmm = (PIN_TDC - sim.pistonY[c]) * 100;   // мм от ВМТ, 0…72: 1 ед. = 100 мм (D-05)
+  const xmm = (PIN_TDC_R - sim.pistonR[c]) * 100;   // мм от ВМТ по оси ряда, 0…75
   switch (key) {
     case 'crankshaft': return [['Угол поворота', degrees(Math.round(mod(sim.theta / DEG, 360)))], ['Угол в цикле', degrees(Math.round(cycDeg())) + ' из 720°'], ['Обороты модели', unit(rpm, 'об/мин')]];
     case 'pistons': return [[`Цилиндр ${c + 1}`, st], ['От ВМТ', unit(xmm, 'мм', 1)], ['Давление над поршнем', unit(pressureAt(phi), 'бар', 1)]];
     case 'rods': { const a = Math.asin(CRANK_R * Math.sin((sim.theta - FIRE_DEG[c] * DEG)) / ROD_L) / DEG; return [[`Наклон шатуна, ц. ${c + 1}`, degrees(a, 1)], ['Такт', st]]; }
-    case 'valvetrain': return [[`Впускные, ц. ${c + 1}`, unit(sim.intakeLift[c] * CAM_LIFT * 100, 'мм', 1)], [`Выпускные, ц. ${c + 1}`, unit(sim.exhaustLift[c] * CAM_LIFT * 100, 'мм', 1)], ['Угол распредвала', degrees(Math.round(mod(sim.theta / DEG / 2, 360)))]];
-    case 'sparks': { let best = 1e9, who = 0; for (let i = 0; i < 4; i++) { const d = mod(FIRE_DEG[i] - SPARK_ADV - cycDeg(), 720); if (d < best) { best = d; who = i; } } return [['Следующая искра', `цилиндр ${who + 1}`], ['Через', degrees(Math.round(best)) + ' поворота']]; }
-    case 'intake': { const open = [0, 1, 2, 3].filter(i => sim.intakeLift[i] > 0.02).map(i => i + 1); return [['Открыт впуск', open.length ? 'ц. ' + open.join(', ') : '—'], ['Давление на впуске (модель)', unit(0.92, 'бар', 2)]]; }
-    case 'exhaust': { const open = [0, 1, 2, 3].filter(i => sim.exhaustLift[i] > 0.02).map(i => i + 1); return [['Открыт выпуск', open.length ? 'ц. ' + open.join(', ') : '—'], ['Нагрев (модель)', unit(Math.round(180 + sim.heat * 720), '°C')]]; }
+    case 'valvetrain': return [[`Впускные, ц. ${c + 1}`, unit(sim.intakeLift[c] * CAM_LIFT * 100, 'мм', 1)], [`Выпускные, ц. ${c + 1}`, unit(sim.exhaustLift[c] * CAM_LIFT * 100, 'мм', 1)], ['Угол распредвалов', degrees(Math.round(mod(sim.theta / DEG / 2, 360)))]];
+    case 'covers': return [['Катушки зажигания', 'двенадцать (COP)'], ['Выбранный ряд', c < 6 ? 'левый (−30°, Ц1–Ц6)' : 'правый (+30°, Ц7–Ц12)']];
+    case 'sparks': { let best = 1e9, who = 0; for (let i = 0; i < CYLINDERS; i++) { const d = mod(FIRE_DEG[i] - SPARK_ADV - cycDeg(), 720); if (d < best) { best = d; who = i; } } return [['Следующая искра', `цилиндр ${who + 1}`], ['Через', degrees(Math.round(best)) + ' поворота']]; }
+    case 'intake': { const open = ALL_CYL.filter(i => sim.intakeLift[i] > 0.02).map(i => i + 1); return [['Открыт впуск', open.length ? 'ц. ' + open.join(', ') : '—'], ['Давление на впуске (модель)', unit(0.95, 'бар', 2)]]; }
+    case 'exhaust': { const open = ALL_CYL.filter(i => sim.exhaustLift[i] > 0.02).map(i => i + 1); return [['Открыт выпуск', open.length ? 'ц. ' + open.join(', ') : '—'], ['Нагрев (модель)', unit(Math.round(180 + sim.heat * 720), '°C')]]; }
     case 'head': return [[`Камера ц. ${c + 1}`, st], ['Давление', unit(pressureAt(phi), 'бар', 1)], ['Объём', unit(volumeAt(phi), 'см³')]];
-    case 'belt': return [['Распредвалы', degrees(Math.round(mod(sim.theta / DEG / 2, 360))) + ' (½ коленвала)'], ['Ролик', 'вращается ' + times(R_CRANK_SPR / IDLER.r, 2)]];
-    case 'block': return [0, 1, 2, 3].map(i => [`Цилиндр ${i + 1}`, STROKES[strokeOf(phaseOf(i))].name]);
+    case 'belt': return [['Распредвалы (×4)', degrees(Math.round(mod(sim.theta / DEG / 2, 360))) + ' (½ коленвала)'], ['Натяжной ролик', 'вращается ' + times(R_CRANK_SPR / TIMING_TENS_R, 2)]];
+    case 'block': return [[`Цилиндр ${c + 1}`, st], ['Интервал вспышек', degrees(60) + ' поворота'], ['Нагрев выхлопа', unit(Math.round(180 + sim.heat * 720), '°C')]];
   }
   return [];
 }

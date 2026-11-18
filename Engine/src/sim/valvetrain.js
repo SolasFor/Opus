@@ -1,46 +1,46 @@
 /**
- * @file Привод клапанов: профиль кулачка и установка кулачков (слой sim, уровень L0 — геометрия профиля).
- *
- * M-01a: перенесено из Engine/Engine.html@10c79c8:1098–1103 и 1114–1119 без изменений.
- * Подъём в legacy считается в updateKinematics (Engine.html:1406, остаётся в HTML):
- *   lift = camProfileLift(θ / 2 + lobeAngle(type, cyl) − valveDownAngle(type)), где θ — угол коленвала в радианах,
- *   θ / 2 — угол распредвала.
+ * @file Привод 48 клапанов V12: профиль кулачка и фазировка кулачков 4 распредвалов (слой sim, L0).
  */
-import { DEG, FIRE_DEG, VALVE_TILT, CAM_LIFT, CAM_HALF, IN_MID, EX_MID } from '../config/engine-spec.js';
+import { DEG, FIRE_DEG, VALVE_TILT, CAM_LIFT, CAM_HALF, IN_MID, EX_MID, bankOf } from '../config/engine-spec.js';
 import { mod } from './math.js';
 
 /**
  * Подъём по профилю кулачка: cos² в пределах ±CAM_HALF от вершины, вне — 0.
- * @param {number} psi ψ — угол от вершины кулачка, РАДИАНЫ распредвала, любое число (период 2π).
- * @returns {number} подъём, u (1 u = 100 мм, соглашение модели), от 0 до CAM_LIFT.
- * Источник: Engine.html:1098–1103.
+ * @param {number} psi угол от вершины кулачка, РАДИАНЫ распредвала.
+ * @returns {number} подъём, u, от 0 до CAM_LIFT.
  */
-export function camProfileLift(psi) {      // psi = angle from nose (rad) → lift (world units)
+export function camProfileLift(psi) {
   const a = Math.abs(mod(psi + Math.PI, Math.PI * 2) - Math.PI);
   if (a >= CAM_HALF) return 0;
   const c = Math.cos(a / CAM_HALF * Math.PI / 2);
   return CAM_LIFT * c * c;
 }
 
-/* direction angle (rotation.x convention) the lobe nose must point to for max lift on a valve */
 /**
- * Направление (в соглашении rotation.x распредвала), куда должна смотреть вершина кулачка
- * для наибольшего подъёма клапана.
- * @param {string} type 'intake' — впуск; любое другое значение — выпуск (как в legacy).
- * @returns {number} РАДИАНЫ: π − VALVE_TILT для впуска, π + VALVE_TILT для выпуска.
- * Источник: Engine.html:1114–1115.
+ * Знак смещения распредвала/клапана по локальной оси Z ряда b:
+ * впуск смотрит в развал V (+1 для ряда A, −1 для ряда B), выпуск — наружу (−1 для ряда A, +1 для ряда B).
  */
-export function valveDownAngle(type) { return type === 'intake' ? Math.PI - VALVE_TILT : Math.PI + VALVE_TILT; }
+export function valveSideLocal(bank, type) {
+  return type === 'intake' ? (bank === 0 ? 1 : -1) : (bank === 0 ? -1 : 1);
+}
 
 /**
- * Угол установки вершины кулачка β на распредвале: при фазе цилиндра φ = IN_MID (впуск)
- * или EX_MID (выпуск) вершина смотрит вдоль оси клапана.
- * @param {string} type 'intake' — впуск; любое другое значение — выпуск.
- * @param {number} cyl индекс цилиндра 0…3.
- * @returns {number} β, РАДИАНЫ распредвала.
- * Источник: Engine.html:1116–1119.
+ * Направление (rotation.x в системе ряда), куда смотрит вершина кулачка при наибольшем подъёме.
+ * @param {number} bank 0 (ряд A) или 1 (ряд B).
+ * @param {string} type 'intake' или 'exhaust'.
+ * @returns {number} РАДИАНЫ.
  */
-export function lobeAngle(type, cyl) {   // β: lobe nose angle in camshaft space
+export function valveDownAngle(bank, type) {
+  return valveSideLocal(bank, type) < 0 ? Math.PI - VALVE_TILT : Math.PI + VALVE_TILT;
+}
+
+/**
+ * Угол установки вершины кулачка β на соответствующем распредвале.
+ * @param {string} type 'intake' или 'exhaust'.
+ * @param {number} cyl индекс цилиндра 0…11.
+ * @returns {number} β, РАДИАНЫ распредвала.
+ */
+export function lobeAngle(type, cyl) {
   const mid = type === 'intake' ? IN_MID : EX_MID;
-  return valveDownAngle(type) - (FIRE_DEG[cyl] + mid) / 2 * DEG;
+  return valveDownAngle(bankOf(cyl), type) - (FIRE_DEG[cyl] + mid) / 2 * DEG;
 }

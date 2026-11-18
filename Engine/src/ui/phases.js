@@ -6,6 +6,7 @@
  * M-05d: строки — из ui/strings.ru.js. Имя строки для экранного диктора — «Цилиндр 1: рабочий ход» (aria-label меняется
  * вместе с тактом), а не «Ц1 Раб.».
  */
+import { CYLINDERS } from '../config/engine-spec.js';
 import { STROKES } from '../render/world.js';
 import { strokeOf } from '../sim/cycle.js';
 import { phaseOf } from '../render/kinematics.js';
@@ -34,7 +35,7 @@ const mark = (segs, s) => segs.forEach((list, k) => list.forEach(g => g.classLis
 function initPhases() {
   el.phases.textContent = '';
   ph.rows = []; ph.segs = []; ph.now = []; ph.s = []; ph.cyl = -1; ph.bs = -1;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < CYLINDERS; i++) {
     const row = node('button', 'ph-row'), bar = node('span', 'ph-bar');
     row.type = 'button'; row.dataset.c = i; row.title = S.phaseTitle(i + 1);
     row.setAttribute('aria-pressed', String(i === ui.pvCyl));
@@ -72,7 +73,7 @@ function updatePhases(cd, rows) {
   if (el.angleSlider.getAttribute('aria-valuetext') !== vt) el.angleSlider.setAttribute('aria-valuetext', vt);
   if (!rows) return;
   el.phases.style.setProperty('--x', pctOf(cd));
-  for (let c = 0; c < 4; c++) {
+  for (let c = 0; c < CYLINDERS; c++) {
     const sc = strokeOf(phaseOf(c));
     if (ph.s[c] === sc) continue;
     mark(ph.segs[c], sc); setText(ph.now[c], STROKES[sc].short); ph.s[c] = sc;

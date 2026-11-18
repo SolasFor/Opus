@@ -1,17 +1,6 @@
-/* Материалы деталей M и корпусные материалы с плоскостью разреза и штриховкой сечения (makeHousing).
- * M-02b: раздел 5 Engine/src/main.js, дословно. Совпадение со строками main.js@ac34ff3
- * проверяет tests/split-sync.test.js.
- * M-07a: makeHousing() дополняет onBeforeCompile и ключ программы, заданные раньше, а не заменяет их.
- * Палитра под студийный свет: металлы — metalness до 1, шероховатость по виду обработки; userData.surf — вид
- * процедурной фактуры (render/surface.js, подключает nodeMat()); керамика и краска — MeshPhysicalMaterial с лаком.
- * Цвет побежалости выпуска (heatTint) спокойнее; свечение (heatGlow) и штриховка сечения прежние.
- * M-07b: обработанный алюминий (aluMach), чёрная краска (paintBlack), теплоэкран (shield). Крепёж и мелочь рисуются
- * одним мешем на узел: ключи tint() задают только цвет, Parts.add() пишет его в цвет вершин общего материала
- * hw (металл) или paintHw (краска), поэтому эти ключи сами в сцену не попадают.
- * M-07c: поковки (forged: щёки коленвала, маховик, шатуны), точёный поршень (piston); ключи-цвета hole (тёмные
- * заглушки — вид сверлений и облегчающих отверстий) и carbon (нагар на тарелках клапанов).
- * M-07d: поликлиновой ремень навесного оборудования (polyBelt) — резина с меткой на спинке; шаг метки по u, в нижней
- * строке текстуры метки нет (рёбра и боковины ремня).
+/* Материалы деталей V12 (M) и корпусные материалы с плоскостью разреза и штриховкой сечения (makeHousing).
+ * Включает процедурные карты переплетения карбона 2×2, плато-хонинговки гильз 45°, побежалости титана/инконеля
+ * и магниевой красной шагрени клапанных крышек.
  */
 import * as THREE from 'three';
 import { cutPlane, CAP } from './scene.js';
@@ -25,31 +14,65 @@ function stripeTexture(draw, w = 256, h = 16) {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+function makeCarbonTexture() {
+  const t = stripeTexture((g, w, h) => {
+    g.fillStyle = '#111316'; g.fillRect(0, 0, w, h);
+    const s = 16;
+    for (let y = 0; y < h; y += s) {
+      for (let x = 0; x < w; x += s) {
+        const phase = ((x / s + y / s) | 0) % 4;
+        const gr = g.createLinearGradient(x, y, x + s, y + s);
+        if (phase < 2) { gr.addColorStop(0, '#1c1f24'); gr.addColorStop(0.5, '#343942'); gr.addColorStop(1, '#15181c'); }
+        else { gr.addColorStop(0, '#101215'); gr.addColorStop(0.5, '#242830'); gr.addColorStop(1, '#121418'); }
+        g.fillStyle = gr; g.fillRect(x, y, s - 1, s - 1);
+      }
+    }
+  }, 128, 128);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(14, 14);
+  t.anisotropy = 4;
+  return t;
+}
+function makeHoneTexture() {
+  const t = stripeTexture((g, w, h) => {
+    g.fillStyle = '#adb2b9'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(42,46,52,0.34)'; g.lineWidth = 1;
+    for (let i = -w; i < w * 2; i += 8) {
+      g.beginPath(); g.moveTo(i, 0); g.lineTo(i + h, h); g.stroke();
+      g.beginPath(); g.moveTo(i + h, 0); g.lineTo(i, h); g.stroke();
+    }
+  }, 128, 128);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(16, 8);
+  t.anisotropy = 4;
+  return t;
+}
 function createMaterials() {
   const std = o => new THREE.MeshStandardMaterial(o);
   const phys = o => new THREE.MeshPhysicalMaterial(o);
-  const S = (m, surf) => { m.userData.surf = surf; return m; };   // M-07a: вид фактуры для render/surface.js
-  const tint = (color, into = 'hw') => { const m = std({ color }); m.userData.into = into; return m; };   // M-07b
-  // exhaust heat tint along the runner (u = 0 at the port): straw → bronze → blue → steel
+  const S = (m, surf) => { m.userData.surf = surf; return m; };
+  const tint = (color, into = 'hw') => { const m = std({ color }); m.userData.into = into; return m; };
+  const carbonTex = makeCarbonTexture();
+  const honeTex = makeHoneTexture();
+
+  // Побежалость титана/инконеля вдоль первичных труб: солома → бронза → фиолетовый → синий → титан
   const heatTint = stripeTexture((g, w, h) => {
     const gr = g.createLinearGradient(0, 0, w, 0);
-    gr.addColorStop(0, '#8a6a48'); gr.addColorStop(0.16, '#94704e'); gr.addColorStop(0.30, '#6c5a6e');
-    gr.addColorStop(0.44, '#5e6a80'); gr.addColorStop(0.62, '#868b92'); gr.addColorStop(1, '#a3a7ac');
+    gr.addColorStop(0, '#9a7446'); gr.addColorStop(0.14, '#8d5b68'); gr.addColorStop(0.28, '#5a628e');
+    gr.addColorStop(0.42, '#4c7498'); gr.addColorStop(0.62, '#8b8f96'); gr.addColorStop(1, '#a9adb2');
     g.fillStyle = gr; g.fillRect(0, 0, w, h);
   });
-  const heatGlow = stripeTexture((g, w, h) => {      // emissive map: glows near the port first
+  const heatGlow = stripeTexture((g, w, h) => {
     const gr = g.createLinearGradient(0, 0, w, 0);
-    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.45, '#9a9a9a'); gr.addColorStop(1, '#2a2a2a');
+    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.45, '#a6a6a6'); gr.addColorStop(1, '#262626');
     g.fillStyle = gr; g.fillRect(0, 0, w, h);
   });
-  // timing belt: tooth stripes along u
   const beltTex = stripeTexture((g, w, h) => {
     g.fillStyle = '#17191c'; g.fillRect(0, 0, w, h);
     g.fillStyle = '#2a2e33'; g.fillRect(0, 0, w * 0.5, h);
     g.fillStyle = 'rgba(255,255,255,0.05)'; g.fillRect(w * 0.5, 0, w * 0.06, h);
   }, 64, 8);
   beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping;
-  // M-07d: поликлиновой ремень — метка на спинке посередине ширины, один шаг на текстуру
   const polyTex = stripeTexture((g, w, h) => {
     g.fillStyle = '#141517'; g.fillRect(0, 0, w, h);
     g.fillStyle = '#4a4e54'; [[0.06, 0.12], [0.22, 0.05], [0.31, 0.16]].forEach(([x, l]) => g.fillRect(w * x, h * 0.375, w * l, h * 0.25));
@@ -57,62 +80,64 @@ function createMaterials() {
   polyTex.wrapS = THREE.RepeatWrapping;
 
   M = {
-    // корпусные отливки: чугун, алюминий (песчаная форма и литьё под давлением)
     iron:     S(std({ color: 0x5a5e63, metalness: 0.80, roughness: 0.66 }), 'iron'),
-    alu:      S(std({ color: 0xa3a7ab, metalness: 0.88, roughness: 0.52 }), 'cast'),
-    aluCast:  S(std({ color: 0x9a9ea2, metalness: 0.85, roughness: 0.60 }), 'cast'),
+    alu:      S(std({ color: 0xa3a7ab, metalness: 0.88, roughness: 0.50 }), 'cast'),
+    aluCast:  S(std({ color: 0x9a9ea2, metalness: 0.85, roughness: 0.58 }), 'cast'),
     aluLight: S(std({ color: 0xb9bdc1, metalness: 0.92, roughness: 0.34 }), 'castFine'),
-    aluDark:  S(std({ color: 0x777c82, metalness: 0.85, roughness: 0.55 }), 'cast'),
-    aluMach:  S(std({ color: 0xc4c8cc, metalness: 1.00, roughness: 0.26 }), 'machined'),   // M-07b: обработанные плоскости
-    // сталь: шлифованные шейки и стержни, поковки
-    steel:    S(std({ color: 0xb4b8bc, metalness: 1.00, roughness: 0.30 }), 'machined'),
-    steelDark:S(std({ color: 0x6a6e72, metalness: 1.00, roughness: 0.46 }), 'forged'),
-    forged:   S(std({ color: 0x7b7f83, metalness: 1.00, roughness: 0.50 }), 'forged'),     // M-07c: поковки
-    piston:   S(std({ color: 0xc0c3c6, metalness: 0.92, roughness: 0.36 }), 'machined'),   // M-07c: точёный поршень
-    chrome:   S(std({ color: 0xd2d6da, metalness: 1.00, roughness: 0.16 }), 'machined'),
-    brass:    S(std({ color: 0xb98652, metalness: 1.00, roughness: 0.34 }), 'machined'),   // вкладыши
-    rings:    S(std({ color: 0x2a2d31, metalness: 1.00, roughness: 0.36 }), 'machined'),
-    ceramic:  phys({ color: 0xf2f1ec, metalness: 0.0, roughness: 0.22, clearcoat: 0.6, clearcoatRoughness: 0.15 }),   // глазурь изолятора
-    gasket:   S(std({ color: 0x7d8186, metalness: 1.00, roughness: 0.40 }), 'castFine'),
-    valve:    S(std({ color: 0x9c968c, metalness: 1.00, roughness: 0.34 }), 'machined'),
-    cam:      S(std({ color: 0xb9bdc0, metalness: 1.00, roughness: 0.22 }), 'machined'),
+    aluDark:  S(std({ color: 0x777c82, metalness: 0.85, roughness: 0.54 }), 'cast'),
+    aluMach:  S(std({ color: 0xc8ccd0, metalness: 1.00, roughness: 0.22 }), 'machined'),
+    liner:    S(std({ color: 0xb8bcc2, map: honeTex, metalness: 0.96, roughness: 0.22 }), 'honed'),
+    steel:    S(std({ color: 0xb6bac0, metalness: 1.00, roughness: 0.28 }), 'machined'),
+    steelDark:S(std({ color: 0x6a6e72, metalness: 1.00, roughness: 0.44 }), 'forged'),
+    forged:   S(std({ color: 0x7b7f83, metalness: 1.00, roughness: 0.48 }), 'forged'),
+    piston:   S(std({ color: 0xc2c5c9, metalness: 0.94, roughness: 0.32 }), 'machined'),
+    chrome:   S(std({ color: 0xd6dade, metalness: 1.00, roughness: 0.14 }), 'machined'),
+    gold:     S(std({ color: 0xd4a44a, metalness: 0.96, roughness: 0.24 }), 'machined'),
+    brass:    S(std({ color: 0xb98652, metalness: 1.00, roughness: 0.32 }), 'machined'),
+    rings:    S(std({ color: 0x2a2d31, metalness: 1.00, roughness: 0.34 }), 'machined'),
+    ceramic:  phys({ color: 0xf2f1ec, metalness: 0.0, roughness: 0.22, clearcoat: 0.65, clearcoatRoughness: 0.14 }),
+    gasket:   S(std({ color: 0x7d8186, metalness: 1.00, roughness: 0.38 }), 'castFine'),
+    valve:    S(std({ color: 0xa09a90, metalness: 1.00, roughness: 0.32 }), 'machined'),
+    cam:      S(std({ color: 0xc0c4c8, metalness: 1.00, roughness: 0.20 }), 'machined'),
     dark:     S(std({ color: 0x1c1e21, metalness: 0.60, roughness: 0.62 }), 'iron'),
     soot:     S(std({ color: 0x2b2826, metalness: 0.30, roughness: 0.88 }), 'iron'),
-    plastic:  S(std({ color: 0x232528, metalness: 0.00, roughness: 0.58 }), 'plastic'),
-    // краска с лаком (clearcoat): «апельсиновая корка» — в фактуре paint
-    paintBlack:S(phys({ color: 0x18191b, metalness: 0.30, roughness: 0.50, clearcoat: 0.15, clearcoatRoughness: 0.45 }), 'paint'),   // M-07b: поддон, датчики
-    paintHw:  S(phys({ color: 0xffffff, vertexColors: true, metalness: 0.20, roughness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.25 }), 'paint'),   // M-07b
-    paintBlue:tint(0x174f97, 'paintHw'),   // M-07b: фильтр
-    paintRed: tint(0xc8361f, 'paintHw'),   // M-07b: ручка щупа
-    pipe:     S(std({ color: 0xffffff, map: heatTint, emissive: 0x000000, emissiveMap: heatGlow, metalness: 1.00, roughness: 0.36 }), 'castFine'),
-    pipe2:    S(std({ color: 0x8e9196, metalness: 1.00, roughness: 0.42 }), 'castFine'),
-    shield:   S(std({ color: 0xaeb2b6, metalness: 1.00, roughness: 0.40 }), 'shield'),   // M-07b: штампованный теплоэкран
+    plastic:  S(std({ color: 0x232528, metalness: 0.00, roughness: 0.56 }), 'plastic'),
+    carbonWeave: S(phys({ color: 0xffffff, map: carbonTex, metalness: 0.15, roughness: 0.24, clearcoat: 1.0, clearcoatRoughness: 0.08 }), 'carbon'),
+    crinkleRed: S(phys({ color: 0xa81c1c, metalness: 0.12, roughness: 0.68, clearcoat: 0.22, clearcoatRoughness: 0.52 }), 'wrinkle'),
+    paintBlack: S(phys({ color: 0x18191b, metalness: 0.30, roughness: 0.48, clearcoat: 0.18, clearcoatRoughness: 0.42 }), 'paint'),
+    paintHw:  S(phys({ color: 0xffffff, vertexColors: true, metalness: 0.20, roughness: 0.40, clearcoat: 0.72, clearcoatRoughness: 0.24 }), 'paint'),
+    paintBlue:tint(0x174f97, 'paintHw'),
+    paintRed: tint(0xc8361f, 'paintHw'),
+    pipe:     S(std({ color: 0xffffff, map: heatTint, emissive: 0x000000, emissiveMap: heatGlow, metalness: 1.00, roughness: 0.30 }), 'titanium'),
+    pipe2:    S(std({ color: 0x92969c, metalness: 1.00, roughness: 0.34 }), 'titanium'),
+    shield:   S(std({ color: 0xb2b6ba, metalness: 1.00, roughness: 0.38 }), 'shield'),
     belt:     S(std({ color: 0xffffff, map: beltTex, metalness: 0.0, roughness: 0.78 }), 'rubber'),
-    polyBelt: S(std({ color: 0xffffff, map: polyTex, metalness: 0.0, roughness: 0.74 }), 'rubber'),   // M-07d
+    polyBelt: S(std({ color: 0xffffff, map: polyTex, metalness: 0.0, roughness: 0.74 }), 'rubber'),
     rubber:   S(std({ color: 0x151618, metalness: 0.0, roughness: 0.82 }), 'rubber'),
-    // M-07b: крепёж и мелочь узла — общий материал с цветом вершин и ключи-цвета для него
-    hw:       S(std({ color: 0xffffff, vertexColors: true, metalness: 1.00, roughness: 0.40 }), 'forged'),
-    bolt:     tint(0x8a8d90),   // болты, гайки (оцинковка)
-    boltDark: tint(0x2c2e31),   // оксидированные болты
-    copper:   tint(0xb06a3e),   // медные гайки выпуска
-    fitting:  tint(0xb4b8bc),   // мелкие стальные детали (цвет steel)
-    fittingDark: tint(0x6a6e72),   // шайбы, пробки (цвет steelDark)
-    shell:    tint(0xb98652),   // вкладыши коренных подшипников (цвет brass)
-    wire:     tint(0x151618),   // провод датчика, резина демпфера (цвет rubber)
-    hole:     tint(0x111214),   // M-07c: сверления и облегчающие отверстия — тёмные заглушки
-    carbon:   tint(0x2b2826)    // M-07c: нагар на тарелках клапанов (цвет soot)
+    hw:       S(std({ color: 0xffffff, vertexColors: true, metalness: 1.00, roughness: 0.38 }), 'forged'),
+    bolt:     tint(0x8a8d90),
+    boltDark: tint(0x2c2e31),
+    copper:   tint(0xb06a3e),
+    anodizedBlue: tint(0x1d6fe8),
+    anodizedRed: tint(0xc92a2a),
+    fitting:  tint(0xb4b8bc),
+    fittingDark: tint(0x6a6e72),
+    shell:    tint(0xb98652),
+    wire:     tint(0x151618),
+    hole:     tint(0x111214),
+    carbon:   tint(0x2b2826)
   };
   M.belt.userData.isBelt = true;
   M.pipe.userData.isPipe = true;
+  M.pipe2.userData.isPipe = true;
 }
 
-/* housing materials get the cut plane + hatched "section" on back faces */
 function makeHousing(m) {
   m.side = THREE.DoubleSide;
   m.clippingPlanes = [cutPlane];
   m.shadowSide = THREE.FrontSide;
   m.userData.housing = true;
-  const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;   // M-07a: вставки до makeHousing() сохраняются
+  const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
   m.onBeforeCompile = (sh, r) => {
     prev.call(m, sh, r);
     sh.uniforms.uCapOn = CAP.uCapOn;
